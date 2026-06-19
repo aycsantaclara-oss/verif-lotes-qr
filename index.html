@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Clientes — Verificación de Lotes</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc,
+    query, where, writeBatch, onSnapshot, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD4C040v4BhrGaG0s1AiLNlzy5oy8OU2sA",
+    authDomain: "qr-clientes-e83ee.firebaseapp.com",
+    projectId: "qr-clientes-e83ee",
+    storageBucket: "qr-clientes-e83ee.firebasestorage.app",
+    messagingSenderId: "462607210480",
+    appId: "1:462607210480:web:80c834640431cd93caaf35"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  window.__db = db;
+  window.__fs = {
+    collection, doc, getDoc, getDocs, setDoc, updateDoc,
+    query, where, writeBatch, onSnapshot, orderBy
+  };
+</script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --border:#2a3240;
+    --text:#e6edf3; --muted:#8b96a5; --accent:#3b82f6; --accent2:#2563eb;
+    --ok:#22c55e; --warn:#eab308; --err:#ef4444;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 80px;}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  header h1{font-size:18px;margin:0;font-weight:600;}
+  header h1 span{color:var(--muted);font-weight:400;font-size:13px;display:block;margin-top:2px;}
+  nav{display:flex;gap:6px;margin-bottom:20px;background:var(--panel);border-radius:12px;padding:4px;}
+  nav button{flex:1;padding:10px 8px;border:none;background:transparent;color:var(--muted);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;}
+  nav button.active{background:var(--accent);color:#fff;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:14px;}
+  .card h2{font-size:15px;margin:0 0 12px;color:var(--text);}
+  .stat-row{display:flex;gap:10px;margin-bottom:16px;}
+  .stat{flex:1;background:var(--panel2);border-radius:12px;padding:14px;text-align:center;}
+  .stat .n{font-size:24px;font-weight:700;}
+  .stat .l{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
+  .stat.ok .n{color:var(--ok);} .stat.pend .n{color:var(--warn);} .stat.err .n{color:var(--err);}
+  button.btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;width:100%;}
+  button.btn:hover{background:var(--accent2);}
+  button.btn:disabled{opacity:.4;cursor:not-allowed;}
+  button.btn.secondary{background:var(--panel2);border:1px solid var(--border);color:var(--text);}
+  button.btn.danger{background:var(--err);}
+  input,select{width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;}
+  input:focus,select:focus{outline:none;border-color:var(--accent);}
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px 6px;border-bottom:1px solid var(--border);}
+  td{padding:9px 6px;border-bottom:1px solid var(--border);}
+  tr:hover td{background:rgba(255,255,255,.02);}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.pendiente{background:rgba(234,179,8,.15);color:var(--warn);}
+  .badge.pegado{background:rgba(34,197,94,.15);color:var(--ok);}
+  .badge.duplicado{background:rgba(239,68,68,.15);color:var(--err);}
+  #reader{width:100%;border-radius:12px;overflow:hidden;}
+  .result-box{padding:16px;border-radius:12px;margin-top:12px;text-align:center;font-weight:600;font-size:15px;}
+  .result-box.ok{background:rgba(34,197,94,.12);border:1px solid var(--ok);color:var(--ok);}
+  .result-box.err{background:rgba(239,68,68,.12);border:1px solid var(--err);color:var(--err);}
+  .result-box.dup{background:rgba(234,179,8,.12);border:1px solid var(--warn);color:var(--warn);}
+  .small{font-size:12px;color:var(--muted);margin-top:4px;font-weight:400;}
+  .hidden{display:none !important;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border);padding:12px 20px;border-radius:10px;font-size:13px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  .search-bar{margin-bottom:12px;}
+  .empty{text-align:center;color:var(--muted);padding:30px 0;font-size:13px;}
+  .scan-toggle{display:flex;gap:8px;margin-bottom:12px;}
+  .index-pill{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--muted);font-family:monospace;}
+  .login-card{max-width:340px;margin:60px auto 0;}
+  .login-card h1{text-align:center;font-size:20px;margin-bottom:4px;}
+  .login-card p{text-align:center;color:var(--muted);font-size:13px;margin-bottom:20px;}
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="wrap hidden">
+  <div class="login-card card">
+    <h1>QR Clientes</h1>
+    <p>Verificación de lotes — acceso</p>
+    <div style="margin-bottom:10px">
+      <input id="login-pass" type="password" placeholder="Contraseña de acceso" />
+    </div>
+    <button class="btn" id="login-btn">Entrar</button>
+    <div id="login-error" class="small" style="color:var(--err);margin-top:8px;text-align:center"></div>
+  </div>
+</div>
+
+<div id="app-screen" class="wrap hidden">
+  <header>
+    <h1>QR Clientes <span>Verificación de lotes pegados</span></h1>
+    <button class="btn secondary" style="width:auto;padding:8px 14px;font-size:12px" id="logout-btn">Salir</button>
+  </header>
+
+  <nav>
+    <button data-tab="dashboard" class="active">Resumen</button>
+    <button data-tab="asignar">Asignar lote</button>
+    <button data-tab="escanear">Escanear</button>
+    <button data-tab="listado">Listado</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="tab">
+    <div class="stat-row">
+      <div class="stat"><div class="n" id="stat-total">—</div><div class="l">Total</div></div>
+      <div class="stat ok"><div class="n" id="stat-pegado">—</div><div class="l">Pegados OK</div></div>
+      <div class="stat pend"><div class="n" id="stat-pendiente">—</div><div class="l">Pendientes</div></div>
+      <div class="stat err"><div class="n" id="stat-duplicado">—</div><div class="l">Duplicados</div></div>
+    </div>
+    <div class="card">
+      <h2>Inicialización de la base</h2>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Si es la primera vez que abrís la app, cargá los 336 códigos a la base de datos. Esto se hace una sola vez.</p>
+      <button class="btn secondary" id="seed-btn">Cargar 336 códigos a Firestore</button>
+      <div id="seed-status" class="small" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ASIGNAR LOTE -->
+  <div id="tab-asignar" class="tab hidden">
+    <div class="card">
+      <h2>Asignar lote a cada código</h2>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Elegí el código por su número de planilla (1–336) y asignale el lote correspondiente.</p>
+      <div class="row" style="margin-bottom:10px">
+        <input id="asig-index" type="number" min="1" max="336" placeholder="N° en planilla (1-336)" />
+        <input id="asig-lote" type="text" placeholder="Lote (ej: L-001)" />
+      </div>
+      <button class="btn" id="asig-btn">Guardar asignación</button>
+      <div id="asig-status" class="small" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Asignación rápida en rango</h2>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Asigná el mismo lote a un rango de códigos consecutivos de la planilla.</p>
+      <div class="row" style="margin-bottom:10px">
+        <input id="rango-desde" type="number" min="1" max="336" placeholder="Desde N°" />
+        <input id="rango-hasta" type="number" min="1" max="336" placeholder="Hasta N°" />
+        <input id="rango-lote" type="text" placeholder="Lote" />
+      </div>
+      <button class="btn secondary" id="rango-btn">Asignar rango</button>
+      <div id="rango-status" class="small" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ESCANEAR -->
+  <div id="tab-escanear" class="tab hidden">
+    <div class="card">
+      <h2>Verificar código pegado</h2>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Escaneá el Data Matrix pegado en el lote. La app valida que exista, que no haya sido escaneado antes, y marca la trazabilidad.</p>
+      <div class="row" style="margin-bottom:10px">
+        <input id="operario-input" type="text" placeholder="Tu nombre (operario)" />
+      </div>
+      <div class="scan-toggle">
+        <button class="btn secondary" id="start-scan-btn" style="flex:1">Iniciar cámara</button>
+        <button class="btn danger hidden" id="stop-scan-btn" style="flex:1">Detener</button>
+      </div>
+      <div id="reader"></div>
+      <div id="scan-result"></div>
+    </div>
+  </div>
+
+  <!-- LISTADO -->
+  <div id="tab-listado" class="tab hidden">
+    <div class="card">
+      <h2>Listado completo</h2>
+      <div class="search-bar">
+        <input id="search-input" type="text" placeholder="Buscar por N°, lote o estado..." />
+      </div>
+      <div style="max-height:520px;overflow-y:auto">
+        <table>
+          <thead><tr><th>N°</th><th>Lote</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
+          <tbody id="listado-body"></tbody>
+        </table>
+        <div id="listado-empty" class="empty hidden">Sin resultados.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+const CODES = [[1, "5>,r'H", "ownG"], [2, "5Uny*b", "AwcN"], [3, "5tb,?0", "GFJx"], [4, "5hVW/D", "2V0O"], [5, "5IWsWB", "N/D/"], [6, "5JsXrD", "WZMC"], [7, "56FbZg", "gj2i"], [8, "5mZIyV", "3/Ny"], [9, "5kGVdx", "LVDM"], [10, "5h\"fwZ", "yKlS"], [11, "5aghP9", "qSUN"], [12, "5n3Boq", "U7Dr"], [13, "5TJlcz", "eUtr"], [14, "5,fE;s", "n8VJ"], [15, "5f=BLz", "Ure0"], [16, "5,Yaf9", "oFIY"], [17, "5pR0UX", "P2/P"], [18, "5C_VB*", "i7FA"], [19, "5PDF<h", "2jn0"], [20, "5Pu*ge", "KvBh"], [21, "5ecs-V", "5rQa"], [22, "5<4w1Q", "0R0Y"], [23, "5PcBDF", "jhVH"], [24, "5ggnZa", "C8Eu"], [25, "5\"BgEd", "09z1"], [26, "5mpcx?", "g94D"], [27, "5mDVcV", "2JRE"], [28, "5Rmdes", "M74q"], [29, "52nIP1", "OpD3"], [30, "5Rd'rc", "Gx/t"], [31, "5l'UY%", "O5Up"], [32, "5Kf0E4", "PB3a"], [33, "5zrCSR", "J3eZ"], [34, "5RDCwT", "oRtt"], [35, "5hRM%s", "68jR"], [36, "5;'zSo", "Z3P9"], [37, "5hFgKt", "6p/H"], [38, "5Zjy=D", "vLKr"], [39, "5NxA?p", "Rv0b"], [40, "5s4q<a", "HmO0"], [41, "5HgqOR", "wT+v"], [42, "5Z1OEk", "W4NC"], [43, "5URNMa", "cIrN"], [44, "5gAeGS", "GAg/"], [45, "5w7SZO", "/rOC"], [46, "50OIZr", "cMx4"], [47, "5+b<ns", "eihq"], [48, "5C*DsY", "2f8i"], [49, "5UjUPU", "with"], [50, "5KYKPD", "QBSd"], [51, "56)QnT", "5WEQ"], [52, "5jsJ6P", "SA+K"], [53, "5LIaGQ", "nV5c"], [54, "5Xl;NO", "tgpF"], [55, "51)UMc", "0480"], [56, "5Hpdqe", "dwCR"], [57, "5c+*l)", "GjgC"], [58, "5\"YH?b", "iYaW"], [59, "50q!\"c", "hTAg"], [60, "5nYtd:", "o1mr"], [61, "5h(Jop", "omUy"], [62, "5h%R2h", "foD3"], [63, "5gejaO", "+4go"], [64, "5k;>eN", "adNy"], [65, "5ghVP-", "cSzs"], [66, "5FSGmj", "sJ3w"], [67, "57.j.?", "EA8O"], [68, "5GZ,LB", "oVTl"], [69, "5QK-TT", "RiAl"], [70, "5NQcCt", "ch2P"], [71, "5NDiPs", "3t/i"], [72, "5lirLu", "yj8k"], [73, "5SL2-j", "K3g0"], [74, "55aHnQ", "HJby"], [75, "5eliLp", "xNWK"], [76, "5Tai'S", "pLbj"], [77, "5PsZrZ", "A8TM"], [78, "5oOdpt", "LZNw"], [79, "5wQB=W", "iD/E"], [80, "5a9HQT", "b+rk"], [81, "5%FwYD", "iQQP"], [82, "5tTeIz", "/+yK"], [83, "5duU0E", "djgB"], [84, "5SGcbi", "agFA"], [85, "5bfhRP", "VRtG"], [86, "5xK\"uO", "eElj"], [87, "5vCUsr", "izah"], [88, "5,:\"G<", "nS9M"], [89, "5Qw8.q", "VetV"], [90, "5lLWvq", "QisB"], [91, "5eZfNR", "F2xJ"], [92, "5rKXH5", "Rb5B"], [93, "5A4!6G", "ouqo"], [94, "5NK-!F", "GppU"], [95, "5e3PNa", "oHSX"], [96, "5PcL-j", "n46u"], [97, "5JgB?*", "rQ5u"], [98, "5ipa=?", "/guY"], [99, "5omloJ", "PHGx"], [100, "5ce\"C/", "vYb0"], [101, "5xD(XN", "hYV6"], [102, "5qOu+!", "vuzh"], [103, "5wDzj7", "bklS"], [104, "5QCGA(", "4at9"], [105, "5)m+&q", "wY76"], [106, "5&&E6E", "CFNi"], [107, "53UC0w", "uojX"], [108, "5WoAUR", "Fazr"], [109, "5o5X8g", "gsDF"], [110, "5ABVJZ", "KCVw"], [111, "5JuoLC", "GXBz"], [112, "5Y/EK9", "TP+G"], [113, "5\"_4iY", "Z2vc"], [114, "5*a9ZZ", "dBJA"], [115, "5VcA3w", "LoSe"], [116, "5/)WfQ", "mJE5"], [117, "5cbSu8", "0BoE"], [118, "5*JqvQ", "WNBq"], [119, "5Qf\"mO", "FqpA"], [120, "51QKLe", "OaRI"], [121, "5>kdO/", "B7Dk"], [122, "5PJl,K", "zaCr"], [123, "5CzMMg", "emsE"], [124, "5%5nj2", "kUCJ"], [125, "5\"yzHa", "id1/"], [126, "56GPbi", "XJ7o"], [127, "5e'gar", "rRIw"], [128, "5WIzkI", "qume"], [129, "5GuihU", "GOdn"], [130, "5zENqp", "qkTH"], [131, "5iEhR'", "oJX4"], [132, "5cE1.f", "Xc93"], [133, "5kj+kX", "Uvd3"], [134, "5dYQPE", "vhE8"], [135, "5Zfsmr", "b48Y"], [136, "5cWsU(", "Fb1I"], [137, "5fC'K;", "vHcY"], [138, "5GYyEc", "bm6o"], [139, "5FvIP'", "MzCv"], [140, "5P*-uU", "CgJD"], [141, "5DdU(u", "0xo9"], [142, "5,URpo", "gTec"], [143, "5lJ,pO", "F2fm"], [144, "5L0*Lb", "YGUT"], [145, "5!=YL2", "xmwp"], [146, "5d(PZ'", "KjO0"], [147, "5N\"Cjp", "T0/X"], [148, "5ig=jP", "NJG1"], [149, "5Glsmr", "MJRv"], [150, "53gBLq", "37Ie"], [151, "5dyimL", "XPgb"], [152, "5=gk'P", "xDhO"], [153, "50rYkY", "jym+"], [154, "5L&MW_", "MUHG"], [155, "5icFbS", "33nl"], [156, "5WgLnh", "CVR8"], [157, "5tgIl%", "85+/"], [158, "5/I_r)", "tGLj"], [159, "5neafy", "1w+r"], [160, "5;nI(H", "3ql1"], [161, "5lD7AA", "XX+K"], [162, "5G&rdh", "qCbE"], [163, "5;=pUV", "M2zQ"], [164, "52:g?J", "+lzh"], [165, "5rEFhe", "Vz4v"], [166, "5d\"S5o", "+sgp"], [167, "5sw0CG", "5AAR"], [168, "5fg4';", "QkCf"], [169, "5rehGL", "lZY+"], [170, "5O52xx", "5kFR"], [171, "5fgZvj", "Fa4Z"], [172, "5e&hEA", "HLjg"], [173, "58ACpJ", "VQdA"], [174, "5V.LXj", "Bqfc"], [175, "5\"PctA", "vsXS"], [176, "5N?JqT", "C42f"], [177, "51FW(x", "FwbB"], [178, "5kZpng", "9RaB"], [179, "5g7Rke", "NSaI"], [180, "5xJTgH", "rfR7"], [181, "5Oq_Xs", "EzDu"], [182, "5e<vUV", "N6st"], [183, "5gIKCm", "sgc+"], [184, "5ZDnOO", "6SAC"], [185, "5ZOyhI", "djSF"], [186, "5Fe,2f", "4oPr"], [187, "5,bL0t", "Z08U"], [188, "5SjbLb", "1qLL"], [189, "5_MLhu", "Gyd1"], [190, "5!9+Ga", "9ibE"], [191, "5SwhMH", "kYUh"], [192, "5AA>c8", "fOSJ"], [193, "5Jtrtg", "szFU"], [194, "5t62rO", "kqwZ"], [195, "5flsoj", "yAla"], [196, "51g_D,", "+QPq"], [197, "5%(PeG", "yEiF"], [198, "5yJKEn", "HNYE"], [199, "5gqZS,", "Gj0b"], [200, "5OWP94", "aqLx"], [201, "5_>RTW", "8SIl"], [202, "5Hvh(>", "0jxn"], [203, "5PMY,9", "a6zO"], [204, "5stsm)", "80SX"], [205, "5s0QUl", "6aEi"], [206, "5bMqKJ", "4h1Z"], [207, "5Wpc:S", "wPvM"], [208, "56q6nX", "BHSg"], [209, "5-h=F1", "HDF/"], [210, "5P2O2l", "/e5H"], [211, "5pfXCz", "A72I"], [212, "5S*HaI", "t+gx"], [213, "5sB*T=", "mWNY"], [214, "5NnXis", "vvJL"], [215, "5kiCP4", "qhpP"], [216, "5CBmZ6", "TZUP"], [217, "5jpfA'", "Zks/"], [218, "5_pTj;", "eRdg"], [219, "5UiWEI", "Evfn"], [220, "5lZekG", "XZjR"], [221, "5q7JRz", "XMpN"], [222, "5TYFR:", "rsQn"], [223, "5jYvgQ", "w5p6"], [224, "5C<'Qo", "4Hni"], [225, "53ILmd", "UpQX"], [226, "5SvNTk", "prAS"], [227, "5qJVlX", "K0GJ"], [228, "5?Dg_O", "t0Tb"], [229, "5R*w2n", "ptMY"], [230, "5o(MG<", "4ZH6"], [231, "5Sp0:s", "eoZS"], [232, "5uwObo", "NSg4"], [233, "5rxIOx", "EGrM"], [234, "5hVWvC", "43Af"], [235, "5JW(mp", "VmIX"], [236, "5,OOnN", "z7lN"], [237, "529xJj", "3cpo"], [238, "5CbYxA", "vvHK"], [239, "5,ATaM", "lAZt"], [240, "5PEOow", "tsw3"], [241, "5U0CDX", "Ud4Q"], [242, "5d:ERT", "Loyf"], [243, "5fmZqK", "MeIU"], [244, "5D3dnm", "KSYA"], [245, "5TEOx-", "5nbH"], [246, "5fQqVn", "UTx9"], [247, "5wkB>i", "b3uo"], [248, "5npKG>", "AlyS"], [249, "5XxHJ;", "pqHW"], [250, "5swWUq", "7YQh"], [251, "53HiWP", "ORSr"], [252, "5EgMfY", "qafM"], [253, "5JERCW", "ivlT"], [254, "5W3f?f", "kO9p"], [255, "5n?u,t", "K+BS"], [256, "5-GMzH", "L1gb"], [257, "5Rb2UH", "PIfP"], [258, "5bB3o0", "qEva"], [259, "5Sdgoe", "7TtJ"], [260, "50\"GrR", "My/u"], [261, "5vgrrY", "PkY/"], [262, "5rJ;Lu", "+pLh"], [263, "5Cgfj0", "/CdK"], [264, "5fI_ne", "1fOW"], [265, "5yyp9l", "PnHX"], [266, "5VYJen", "ahYt"], [267, "5jBDb:", "n+P5"], [268, "5T=6dV", "aFOj"], [269, "5dO*pw", "Lom/"], [270, "5GPEEG", "XKj9"], [271, "5rE2<0", "L3O9"], [272, "5fBU&q", "RHrV"], [273, "5nZg_a", "3m35"], [274, "5;jLOh", "wafx"], [275, "5pES!E", "Jul9"], [276, "5rB&hl", "jlfg"], [277, "5C,iZT", "OUWT"], [278, "5U6H.c", "GWZ+"], [279, "5'm/WF", "G1Mx"], [280, "5efCCe", "mBlQ"], [281, "5uD?7)", "izhG"], [282, "5Fo5HC", "YIg7"], [283, "5VymZD", "1G67"], [284, "5r9maX", "nksP"], [285, "5zsH7=", "ed0E"], [286, "5iy7Aq", "SUqU"], [287, "5;C,Vc", "PKcV"], [288, "5nq77h", "9fLw"], [289, "5SO:OW", "9fjV"], [290, "5ISr4F", "dPFZ"], [291, "5c1gr(", "x5dq"], [292, "55=3gm", "Ifhc"], [293, "5_c%VU", "ZTfC"], [294, "5F*Xjr", "GGal"], [295, "5U4jOn", "JGMp"], [296, "5=kcfJ", "/7o+"], [297, "5obLOG", "m3pl"], [298, "5uEpWu", "DZQG"], [299, "5LUvCb", "Bknb"], [300, "55XdnM", "JZz+"], [301, "5enXZn", "o4zf"], [302, "50MVDR", "ylVb"], [303, "5BMN-W", "6tAS"], [304, "5+BmhQ", "+02F"], [305, "5w04SW", "Cv34"], [306, "5uWqOU", "15M+"], [307, "5tn&Jm", "Taes"], [308, "5bWlV0", "DX2X"], [309, "5E(Sju", "ZNSV"], [310, "5L>TE1", "GIUf"], [311, "5Wk(U8", "qXmC"], [312, "5YrnQV", "I5hW"], [313, "5GXfWu", "HCJ7"], [314, "5tVdEI", "Vh+S"], [315, "5U/hD(", "GCzb"], [316, "5IZzg_", "mXzD"], [317, "5ke)DQ", "G1PP"], [318, "5jCiO>", "d+5j"], [319, "5PFTP)", "LR9u"], [320, "59W%ux", "TKXs"], [321, "5CbJo=", "UPKZ"], [322, "55<&rV", "LlR3"], [323, "5bFbs2", "ZC0k"], [324, "5mhgDe", "FMf1"], [325, "540pNw", "kSmc"], [326, "5sFzw;", "0aqx"], [327, "5a!is.", "xEwI"], [328, "5?cDYF", "PWFX"], [329, "5kr3F.", "fhN9"], [330, "5mbKEa", "xG9v"], [331, "56Ydnt", "0mNI"], [332, "54H2j!", "3yrU"], [333, "5vTU!o", "sDCg"], [334, "5B5m\"X", "rwiv"], [335, "5E=E7k", "RH9J"], [336, "5=8F=P", "8IT/"]];
+const TOTAL_CODES = CODES.length;
+const ACCESS_PASSWORD = "verif2026";
+
+let html5Qr = null;
+let scanning = false;
+let allRecords = [];
+
+function showToast(msg, ms=2500){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(()=>t.classList.add('hidden'), ms);
+}
+
+// ---------- LOGIN ----------
+function checkLogin(){
+  if(sessionStorage.getItem('qrc_auth') === '1'){
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-screen').classList.remove('hidden');
+    initApp();
+  } else {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('app-screen').classList.add('hidden');
+  }
+}
+document.getElementById('login-btn').addEventListener('click', ()=>{
+  const val = document.getElementById('login-pass').value;
+  if(val === ACCESS_PASSWORD){
+    sessionStorage.setItem('qrc_auth','1');
+    checkLogin();
+  } else {
+    document.getElementById('login-error').textContent = 'Contraseña incorrecta';
+  }
+});
+document.getElementById('login-pass').addEventListener('keydown', e=>{
+  if(e.key==='Enter') document.getElementById('login-btn').click();
+});
+document.getElementById('logout-btn').addEventListener('click', ()=>{
+  sessionStorage.removeItem('qrc_auth');
+  if(scanning) stopScan();
+  checkLogin();
+});
+
+// ---------- TABS ----------
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab').forEach(t=>t.classList.add('hidden'));
+    document.getElementById('tab-'+btn.dataset.tab).classList.remove('hidden');
+    if(btn.dataset.tab !== 'escanear' && scanning) stopScan();
+  });
+});
+
+// ---------- FIRESTORE HELPERS ----------
+function colRef(){
+  return __fs.collection(__db, 'codigos');
+}
+function docRef(id){
+  return __fs.doc(__db, 'codigos', String(id));
+}
+
+async function seedDatabase(){
+  const statusEl = document.getElementById('seed-status');
+  const btn = document.getElementById('seed-btn');
+  btn.disabled = true;
+  statusEl.textContent = 'Verificando si ya existen datos...';
+  const snap = await __fs.getDocs(colRef());
+  if(snap.size > 0){
+    statusEl.textContent = `Ya hay ${snap.size} códigos cargados. No se vuelve a cargar para evitar duplicados.`;
+    btn.disabled = false;
+    return;
+  }
+  statusEl.textContent = `Cargando ${TOTAL_CODES} códigos...`;
+  // Firestore batch limit is 500 writes, we have 336 so one batch is enough
+  const batch = __fs.writeBatch(__db);
+  CODES.forEach(([index, serial, security])=>{
+    batch.set(docRef(index), {
+      index: index,
+      gtin: "07798312320246",
+      serial: serial,
+      security: security,
+      lote: "",
+      estado: "pendiente",
+      operario: "",
+      fecha_pegado: null
+    });
+  });
+  await batch.commit();
+  statusEl.textContent = `Listo. Se cargaron ${TOTAL_CODES} códigos con estado "pendiente".`;
+  btn.disabled = false;
+  await refreshDashboard();
+}
+document.getElementById('seed-btn').addEventListener('click', seedDatabase);
+
+// ---------- LOAD ALL RECORDS ----------
+async function loadAllRecords(){
+  const snap = await __fs.getDocs(colRef());
+  const recs = [];
+  snap.forEach(d=>recs.push(d.data()));
+  recs.sort((a,b)=>a.index-b.index);
+  allRecords = recs;
+  return recs;
+}
+
+async function refreshDashboard(){
+  const recs = await loadAllRecords();
+  const total = recs.length;
+  const pegado = recs.filter(r=>r.estado==='pegado').length;
+  const pendiente = recs.filter(r=>r.estado==='pendiente').length;
+  const duplicado = recs.filter(r=>r.estado==='duplicado').length;
+  document.getElementById('stat-total').textContent = total || '0';
+  document.getElementById('stat-pegado').textContent = pegado;
+  document.getElementById('stat-pendiente').textContent = pendiente;
+  document.getElementById('stat-duplicado').textContent = duplicado;
+  renderListado();
+}
+
+// ---------- ASIGNAR LOTE (individual) ----------
+document.getElementById('asig-btn').addEventListener('click', async ()=>{
+  const idx = parseInt(document.getElementById('asig-index').value, 10);
+  const lote = document.getElementById('asig-lote').value.trim();
+  const statusEl = document.getElementById('asig-status');
+  if(!idx || idx<1 || idx>TOTAL_CODES){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = `Ingresá un número entre 1 y ${TOTAL_CODES}.`;
+    return;
+  }
+  if(!lote){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Ingresá el lote.';
+    return;
+  }
+  try{
+    await __fs.updateDoc(docRef(idx), { lote: lote });
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = `Código #${idx} asignado al lote "${lote}".`;
+    document.getElementById('asig-index').value = '';
+    document.getElementById('asig-lote').value = '';
+    await refreshDashboard();
+  }catch(e){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Error: ' + e.message;
+  }
+});
+
+// ---------- ASIGNAR RANGO ----------
+document.getElementById('rango-btn').addEventListener('click', async ()=>{
+  const desde = parseInt(document.getElementById('rango-desde').value, 10);
+  const hasta = parseInt(document.getElementById('rango-hasta').value, 10);
+  const lote = document.getElementById('rango-lote').value.trim();
+  const statusEl = document.getElementById('rango-status');
+  if(!desde || !hasta || desde<1 || hasta>TOTAL_CODES || desde>hasta){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Rango inválido.';
+    return;
+  }
+  if(!lote){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Ingresá el lote.';
+    return;
+  }
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Asignando...';
+  const batch = __fs.writeBatch(__db);
+  for(let i=desde;i<=hasta;i++){
+    batch.update(docRef(i), { lote: lote });
+  }
+  await batch.commit();
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = `Asignados ${hasta-desde+1} códigos (N° ${desde} a ${hasta}) al lote "${lote}".`;
+  document.getElementById('rango-desde').value = '';
+  document.getElementById('rango-hasta').value = '';
+  document.getElementById('rango-lote').value = '';
+  await refreshDashboard();
+});
+
+// ---------- ESCANEAR ----------
+function extractSerialFromRaw(rawText){
+  // GS1 Data Matrix format: 01 + 14 digit GTIN + 21 + serial + GS(\x1d) + 93 + security
+  // We only need to match against known serials, so just check containment
+  return rawText;
+}
+
+function findRecordByRawScan(rawText){
+  // The raw scanned text should contain the serial string embedded after AI(21)
+  // Try direct match: does rawText include record.serial as substring?
+  for(const r of allRecords){
+    if(rawText.indexOf(r.serial) !== -1){
+      return r;
+    }
+  }
+  return null;
+}
+
+async function handleScanSuccess(decodedText){
+  const operario = document.getElementById('operario-input').value.trim();
+  const resultBox = document.getElementById('scan-result');
+  if(!operario){
+    resultBox.innerHTML = `<div class="result-box err">Ingresá el nombre del operario antes de escanear.</div>`;
+    return;
+  }
+  if(allRecords.length === 0){
+    await loadAllRecords();
+  }
+  const record = findRecordByRawScan(decodedText);
+  if(!record){
+    resultBox.innerHTML = `<div class="result-box err">⚠ Código no reconocido.<div class="small">No corresponde a la lista cargada. Puede ser un código ajeno o adulterado.</div></div>`;
+    showToast('Código no reconocido');
+    return;
+  }
+  if(record.estado === 'pegado'){
+    resultBox.innerHTML = `<div class="result-box dup">⚠ DUPLICADO — Código #${record.index}<div class="small">Ya fue verificado el ${formatDate(record.fecha_pegado)} por ${record.operario}. Lote: ${record.lote||'(sin asignar)'}</div></div>`;
+    showToast('Código duplicado #'+record.index);
+    // mark as duplicado flag too, but keep original pegado data
+    await __fs.updateDoc(docRef(record.index), { estado: 'duplicado_intento', ultimo_intento_operario: operario, ultimo_intento_fecha: new Date().toISOString() });
+    return;
+  }
+  const now = new Date().toISOString();
+  await __fs.updateDoc(docRef(record.index), {
+    estado: 'pegado',
+    operario: operario,
+    fecha_pegado: now
+  });
+  record.estado='pegado'; record.operario=operario; record.fecha_pegado=now;
+  resultBox.innerHTML = `<div class="result-box ok">✓ OK — Código #${record.index}<div class="small">Lote: ${record.lote || '(sin asignar)'} — registrado correctamente</div></div>`;
+  showToast('✓ Código #'+record.index+' verificado');
+  refreshDashboard();
+}
+
+function formatDate(iso){
+  if(!iso) return '-';
+  const d = new Date(iso);
+  return d.toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+document.getElementById('start-scan-btn').addEventListener('click', async ()=>{
+  if(allRecords.length===0) await loadAllRecords();
+  document.getElementById('start-scan-btn').classList.add('hidden');
+  document.getElementById('stop-scan-btn').classList.remove('hidden');
+  document.getElementById('scan-result').innerHTML = '';
+  html5Qr = new Html5Qrcode("reader");
+  scanning = true;
+  let lastScan = '';
+  let lastScanTime = 0;
+  try{
+    await html5Qr.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ] },
+      (decodedText) => {
+        const now = Date.now();
+        if(decodedText === lastScan && (now-lastScanTime) < 3000) return; // debounce repeated reads
+        lastScan = decodedText;
+        lastScanTime = now;
+        handleScanSuccess(decodedText);
+      },
+      (errorMsg) => { /* ignore per-frame scan errors */ }
+    );
+  }catch(e){
+    showToast('No se pudo iniciar la cámara: '+e.message, 4000);
+    stopScan();
+  }
+});
+
+document.getElementById('stop-scan-btn').addEventListener('click', stopScan);
+async function stopScan(){
+  if(html5Qr && scanning){
+    try{ await html5Qr.stop(); html5Qr.clear(); }catch(e){}
+  }
+  scanning = false;
+  document.getElementById('start-scan-btn').classList.remove('hidden');
+  document.getElementById('stop-scan-btn').classList.add('hidden');
+}
+
+// ---------- LISTADO ----------
+function renderListado(){
+  const filterVal = (document.getElementById('search-input').value || '').toLowerCase().trim();
+  const tbody = document.getElementById('listado-body');
+  const emptyEl = document.getElementById('listado-empty');
+  tbody.innerHTML = '';
+  let filtered = allRecords;
+  if(filterVal){
+    filtered = allRecords.filter(r=>
+      String(r.index).includes(filterVal) ||
+      (r.lote||'').toLowerCase().includes(filterVal) ||
+      (r.estado||'').toLowerCase().includes(filterVal) ||
+      (r.operario||'').toLowerCase().includes(filterVal)
+    );
+  }
+  if(filtered.length===0){
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  const frag = document.createDocumentFragment();
+  filtered.forEach(r=>{
+    const tr = document.createElement('tr');
+    const badgeClass = r.estado==='pegado' ? 'pegado' : (r.estado==='pendiente' ? 'pendiente' : 'duplicado');
+    const badgeLabel = r.estado==='pegado' ? 'Pegado OK' : (r.estado==='pendiente' ? 'Pendiente' : 'Duplicado');
+    tr.innerHTML = `
+      <td><span class="index-pill">#${r.index}</span></td>
+      <td>${r.lote || '<span class="small">sin asignar</span>'}</td>
+      <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+      <td>${r.operario || '-'}</td>
+      <td>${formatDate(r.fecha_pegado)}</td>
+    `;
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+}
+document.getElementById('search-input').addEventListener('input', renderListado);
+
+// ---------- INIT ----------
+async function initApp(){
+  await refreshDashboard();
+}
+
+checkLogin();
+</script>
+</body>
+</html>
+</body>
+</html>
