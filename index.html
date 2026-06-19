@@ -124,10 +124,18 @@
       <div class="stat err"><div class="n" id="stat-duplicado">—</div><div class="l">Duplicados</div></div>
     </div>
     <div class="card">
-      <h2>Inicialización de la base</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Si es la primera vez que abrís la app, cargá los 336 códigos a la base de datos. Esto se hace una sola vez.</p>
-      <button class="btn secondary" id="seed-btn">Cargar 336 códigos a Firestore</button>
+      <h2>Cargar nueva tanda de códigos</h2>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Cuando tengas un PDF nuevo, pasámelo en el chat. Te devuelvo un bloque de texto — pegalo acá tal cual y cargá. Los números de código siguen la numeración automáticamente (no se pisan con tandas anteriores).</p>
+      <div class="row" style="margin-bottom:10px">
+        <input id="tanda-nombre" type="text" placeholder="Nombre de esta tanda (ej: Cliente Pérez - OP920)" />
+      </div>
+      <textarea id="tanda-paste" rows="4" placeholder='Pegá aquí el bloque que te paso, ej: [["07798312320246","5>,r&apos;H","ownG"], ...]' style="width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
+      <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar esta tanda a Firestore</button>
       <div id="seed-status" class="small" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Tandas cargadas</h2>
+      <div id="tandas-list" class="small"></div>
     </div>
   </div>
 
@@ -135,9 +143,9 @@
   <div id="tab-asignar" class="tab hidden">
     <div class="card">
       <h2>Asignar lote a cada código</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Elegí el código por su número de planilla (1–336) y asignale el lote correspondiente.</p>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Elegí el código por su número correlativo y asignale el lote correspondiente.</p>
       <div class="row" style="margin-bottom:10px">
-        <input id="asig-index" type="number" min="1" max="336" placeholder="N° en planilla (1-336)" />
+        <input id="asig-index" type="number" min="1" placeholder="N° de código" />
         <input id="asig-lote" type="text" placeholder="Lote (ej: L-001)" />
       </div>
       <button class="btn" id="asig-btn">Guardar asignación</button>
@@ -145,10 +153,10 @@
     </div>
     <div class="card">
       <h2>Asignación rápida en rango</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Asigná el mismo lote a un rango de códigos consecutivos de la planilla.</p>
+      <p class="small" style="margin-top:-6px;margin-bottom:12px">Asigná el mismo lote a un rango de códigos consecutivos.</p>
       <div class="row" style="margin-bottom:10px">
-        <input id="rango-desde" type="number" min="1" max="336" placeholder="Desde N°" />
-        <input id="rango-hasta" type="number" min="1" max="336" placeholder="Hasta N°" />
+        <input id="rango-desde" type="number" min="1" placeholder="Desde N°" />
+        <input id="rango-hasta" type="number" min="1" placeholder="Hasta N°" />
         <input id="rango-lote" type="text" placeholder="Lote" />
       </div>
       <button class="btn secondary" id="rango-btn">Asignar rango</button>
@@ -177,12 +185,15 @@
   <div id="tab-listado" class="tab hidden">
     <div class="card">
       <h2>Listado completo</h2>
+      <div class="row" style="margin-bottom:10px">
+        <select id="filter-tanda"><option value="">Todas las tandas</option></select>
+      </div>
       <div class="search-bar">
         <input id="search-input" type="text" placeholder="Buscar por N°, lote o estado..." />
       </div>
       <div style="max-height:520px;overflow-y:auto">
         <table>
-          <thead><tr><th>N°</th><th>Lote</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
+          <thead><tr><th>N°</th><th>Tanda</th><th>Lote</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
           <tbody id="listado-body"></tbody>
         </table>
         <div id="listado-empty" class="empty hidden">Sin resultados.</div>
@@ -194,8 +205,6 @@
 <div id="toast" class="toast hidden"></div>
 
 <script>
-const CODES = [[1, "5>,r'H", "ownG"], [2, "5Uny*b", "AwcN"], [3, "5tb,?0", "GFJx"], [4, "5hVW/D", "2V0O"], [5, "5IWsWB", "N/D/"], [6, "5JsXrD", "WZMC"], [7, "56FbZg", "gj2i"], [8, "5mZIyV", "3/Ny"], [9, "5kGVdx", "LVDM"], [10, "5h\"fwZ", "yKlS"], [11, "5aghP9", "qSUN"], [12, "5n3Boq", "U7Dr"], [13, "5TJlcz", "eUtr"], [14, "5,fE;s", "n8VJ"], [15, "5f=BLz", "Ure0"], [16, "5,Yaf9", "oFIY"], [17, "5pR0UX", "P2/P"], [18, "5C_VB*", "i7FA"], [19, "5PDF<h", "2jn0"], [20, "5Pu*ge", "KvBh"], [21, "5ecs-V", "5rQa"], [22, "5<4w1Q", "0R0Y"], [23, "5PcBDF", "jhVH"], [24, "5ggnZa", "C8Eu"], [25, "5\"BgEd", "09z1"], [26, "5mpcx?", "g94D"], [27, "5mDVcV", "2JRE"], [28, "5Rmdes", "M74q"], [29, "52nIP1", "OpD3"], [30, "5Rd'rc", "Gx/t"], [31, "5l'UY%", "O5Up"], [32, "5Kf0E4", "PB3a"], [33, "5zrCSR", "J3eZ"], [34, "5RDCwT", "oRtt"], [35, "5hRM%s", "68jR"], [36, "5;'zSo", "Z3P9"], [37, "5hFgKt", "6p/H"], [38, "5Zjy=D", "vLKr"], [39, "5NxA?p", "Rv0b"], [40, "5s4q<a", "HmO0"], [41, "5HgqOR", "wT+v"], [42, "5Z1OEk", "W4NC"], [43, "5URNMa", "cIrN"], [44, "5gAeGS", "GAg/"], [45, "5w7SZO", "/rOC"], [46, "50OIZr", "cMx4"], [47, "5+b<ns", "eihq"], [48, "5C*DsY", "2f8i"], [49, "5UjUPU", "with"], [50, "5KYKPD", "QBSd"], [51, "56)QnT", "5WEQ"], [52, "5jsJ6P", "SA+K"], [53, "5LIaGQ", "nV5c"], [54, "5Xl;NO", "tgpF"], [55, "51)UMc", "0480"], [56, "5Hpdqe", "dwCR"], [57, "5c+*l)", "GjgC"], [58, "5\"YH?b", "iYaW"], [59, "50q!\"c", "hTAg"], [60, "5nYtd:", "o1mr"], [61, "5h(Jop", "omUy"], [62, "5h%R2h", "foD3"], [63, "5gejaO", "+4go"], [64, "5k;>eN", "adNy"], [65, "5ghVP-", "cSzs"], [66, "5FSGmj", "sJ3w"], [67, "57.j.?", "EA8O"], [68, "5GZ,LB", "oVTl"], [69, "5QK-TT", "RiAl"], [70, "5NQcCt", "ch2P"], [71, "5NDiPs", "3t/i"], [72, "5lirLu", "yj8k"], [73, "5SL2-j", "K3g0"], [74, "55aHnQ", "HJby"], [75, "5eliLp", "xNWK"], [76, "5Tai'S", "pLbj"], [77, "5PsZrZ", "A8TM"], [78, "5oOdpt", "LZNw"], [79, "5wQB=W", "iD/E"], [80, "5a9HQT", "b+rk"], [81, "5%FwYD", "iQQP"], [82, "5tTeIz", "/+yK"], [83, "5duU0E", "djgB"], [84, "5SGcbi", "agFA"], [85, "5bfhRP", "VRtG"], [86, "5xK\"uO", "eElj"], [87, "5vCUsr", "izah"], [88, "5,:\"G<", "nS9M"], [89, "5Qw8.q", "VetV"], [90, "5lLWvq", "QisB"], [91, "5eZfNR", "F2xJ"], [92, "5rKXH5", "Rb5B"], [93, "5A4!6G", "ouqo"], [94, "5NK-!F", "GppU"], [95, "5e3PNa", "oHSX"], [96, "5PcL-j", "n46u"], [97, "5JgB?*", "rQ5u"], [98, "5ipa=?", "/guY"], [99, "5omloJ", "PHGx"], [100, "5ce\"C/", "vYb0"], [101, "5xD(XN", "hYV6"], [102, "5qOu+!", "vuzh"], [103, "5wDzj7", "bklS"], [104, "5QCGA(", "4at9"], [105, "5)m+&q", "wY76"], [106, "5&&E6E", "CFNi"], [107, "53UC0w", "uojX"], [108, "5WoAUR", "Fazr"], [109, "5o5X8g", "gsDF"], [110, "5ABVJZ", "KCVw"], [111, "5JuoLC", "GXBz"], [112, "5Y/EK9", "TP+G"], [113, "5\"_4iY", "Z2vc"], [114, "5*a9ZZ", "dBJA"], [115, "5VcA3w", "LoSe"], [116, "5/)WfQ", "mJE5"], [117, "5cbSu8", "0BoE"], [118, "5*JqvQ", "WNBq"], [119, "5Qf\"mO", "FqpA"], [120, "51QKLe", "OaRI"], [121, "5>kdO/", "B7Dk"], [122, "5PJl,K", "zaCr"], [123, "5CzMMg", "emsE"], [124, "5%5nj2", "kUCJ"], [125, "5\"yzHa", "id1/"], [126, "56GPbi", "XJ7o"], [127, "5e'gar", "rRIw"], [128, "5WIzkI", "qume"], [129, "5GuihU", "GOdn"], [130, "5zENqp", "qkTH"], [131, "5iEhR'", "oJX4"], [132, "5cE1.f", "Xc93"], [133, "5kj+kX", "Uvd3"], [134, "5dYQPE", "vhE8"], [135, "5Zfsmr", "b48Y"], [136, "5cWsU(", "Fb1I"], [137, "5fC'K;", "vHcY"], [138, "5GYyEc", "bm6o"], [139, "5FvIP'", "MzCv"], [140, "5P*-uU", "CgJD"], [141, "5DdU(u", "0xo9"], [142, "5,URpo", "gTec"], [143, "5lJ,pO", "F2fm"], [144, "5L0*Lb", "YGUT"], [145, "5!=YL2", "xmwp"], [146, "5d(PZ'", "KjO0"], [147, "5N\"Cjp", "T0/X"], [148, "5ig=jP", "NJG1"], [149, "5Glsmr", "MJRv"], [150, "53gBLq", "37Ie"], [151, "5dyimL", "XPgb"], [152, "5=gk'P", "xDhO"], [153, "50rYkY", "jym+"], [154, "5L&MW_", "MUHG"], [155, "5icFbS", "33nl"], [156, "5WgLnh", "CVR8"], [157, "5tgIl%", "85+/"], [158, "5/I_r)", "tGLj"], [159, "5neafy", "1w+r"], [160, "5;nI(H", "3ql1"], [161, "5lD7AA", "XX+K"], [162, "5G&rdh", "qCbE"], [163, "5;=pUV", "M2zQ"], [164, "52:g?J", "+lzh"], [165, "5rEFhe", "Vz4v"], [166, "5d\"S5o", "+sgp"], [167, "5sw0CG", "5AAR"], [168, "5fg4';", "QkCf"], [169, "5rehGL", "lZY+"], [170, "5O52xx", "5kFR"], [171, "5fgZvj", "Fa4Z"], [172, "5e&hEA", "HLjg"], [173, "58ACpJ", "VQdA"], [174, "5V.LXj", "Bqfc"], [175, "5\"PctA", "vsXS"], [176, "5N?JqT", "C42f"], [177, "51FW(x", "FwbB"], [178, "5kZpng", "9RaB"], [179, "5g7Rke", "NSaI"], [180, "5xJTgH", "rfR7"], [181, "5Oq_Xs", "EzDu"], [182, "5e<vUV", "N6st"], [183, "5gIKCm", "sgc+"], [184, "5ZDnOO", "6SAC"], [185, "5ZOyhI", "djSF"], [186, "5Fe,2f", "4oPr"], [187, "5,bL0t", "Z08U"], [188, "5SjbLb", "1qLL"], [189, "5_MLhu", "Gyd1"], [190, "5!9+Ga", "9ibE"], [191, "5SwhMH", "kYUh"], [192, "5AA>c8", "fOSJ"], [193, "5Jtrtg", "szFU"], [194, "5t62rO", "kqwZ"], [195, "5flsoj", "yAla"], [196, "51g_D,", "+QPq"], [197, "5%(PeG", "yEiF"], [198, "5yJKEn", "HNYE"], [199, "5gqZS,", "Gj0b"], [200, "5OWP94", "aqLx"], [201, "5_>RTW", "8SIl"], [202, "5Hvh(>", "0jxn"], [203, "5PMY,9", "a6zO"], [204, "5stsm)", "80SX"], [205, "5s0QUl", "6aEi"], [206, "5bMqKJ", "4h1Z"], [207, "5Wpc:S", "wPvM"], [208, "56q6nX", "BHSg"], [209, "5-h=F1", "HDF/"], [210, "5P2O2l", "/e5H"], [211, "5pfXCz", "A72I"], [212, "5S*HaI", "t+gx"], [213, "5sB*T=", "mWNY"], [214, "5NnXis", "vvJL"], [215, "5kiCP4", "qhpP"], [216, "5CBmZ6", "TZUP"], [217, "5jpfA'", "Zks/"], [218, "5_pTj;", "eRdg"], [219, "5UiWEI", "Evfn"], [220, "5lZekG", "XZjR"], [221, "5q7JRz", "XMpN"], [222, "5TYFR:", "rsQn"], [223, "5jYvgQ", "w5p6"], [224, "5C<'Qo", "4Hni"], [225, "53ILmd", "UpQX"], [226, "5SvNTk", "prAS"], [227, "5qJVlX", "K0GJ"], [228, "5?Dg_O", "t0Tb"], [229, "5R*w2n", "ptMY"], [230, "5o(MG<", "4ZH6"], [231, "5Sp0:s", "eoZS"], [232, "5uwObo", "NSg4"], [233, "5rxIOx", "EGrM"], [234, "5hVWvC", "43Af"], [235, "5JW(mp", "VmIX"], [236, "5,OOnN", "z7lN"], [237, "529xJj", "3cpo"], [238, "5CbYxA", "vvHK"], [239, "5,ATaM", "lAZt"], [240, "5PEOow", "tsw3"], [241, "5U0CDX", "Ud4Q"], [242, "5d:ERT", "Loyf"], [243, "5fmZqK", "MeIU"], [244, "5D3dnm", "KSYA"], [245, "5TEOx-", "5nbH"], [246, "5fQqVn", "UTx9"], [247, "5wkB>i", "b3uo"], [248, "5npKG>", "AlyS"], [249, "5XxHJ;", "pqHW"], [250, "5swWUq", "7YQh"], [251, "53HiWP", "ORSr"], [252, "5EgMfY", "qafM"], [253, "5JERCW", "ivlT"], [254, "5W3f?f", "kO9p"], [255, "5n?u,t", "K+BS"], [256, "5-GMzH", "L1gb"], [257, "5Rb2UH", "PIfP"], [258, "5bB3o0", "qEva"], [259, "5Sdgoe", "7TtJ"], [260, "50\"GrR", "My/u"], [261, "5vgrrY", "PkY/"], [262, "5rJ;Lu", "+pLh"], [263, "5Cgfj0", "/CdK"], [264, "5fI_ne", "1fOW"], [265, "5yyp9l", "PnHX"], [266, "5VYJen", "ahYt"], [267, "5jBDb:", "n+P5"], [268, "5T=6dV", "aFOj"], [269, "5dO*pw", "Lom/"], [270, "5GPEEG", "XKj9"], [271, "5rE2<0", "L3O9"], [272, "5fBU&q", "RHrV"], [273, "5nZg_a", "3m35"], [274, "5;jLOh", "wafx"], [275, "5pES!E", "Jul9"], [276, "5rB&hl", "jlfg"], [277, "5C,iZT", "OUWT"], [278, "5U6H.c", "GWZ+"], [279, "5'm/WF", "G1Mx"], [280, "5efCCe", "mBlQ"], [281, "5uD?7)", "izhG"], [282, "5Fo5HC", "YIg7"], [283, "5VymZD", "1G67"], [284, "5r9maX", "nksP"], [285, "5zsH7=", "ed0E"], [286, "5iy7Aq", "SUqU"], [287, "5;C,Vc", "PKcV"], [288, "5nq77h", "9fLw"], [289, "5SO:OW", "9fjV"], [290, "5ISr4F", "dPFZ"], [291, "5c1gr(", "x5dq"], [292, "55=3gm", "Ifhc"], [293, "5_c%VU", "ZTfC"], [294, "5F*Xjr", "GGal"], [295, "5U4jOn", "JGMp"], [296, "5=kcfJ", "/7o+"], [297, "5obLOG", "m3pl"], [298, "5uEpWu", "DZQG"], [299, "5LUvCb", "Bknb"], [300, "55XdnM", "JZz+"], [301, "5enXZn", "o4zf"], [302, "50MVDR", "ylVb"], [303, "5BMN-W", "6tAS"], [304, "5+BmhQ", "+02F"], [305, "5w04SW", "Cv34"], [306, "5uWqOU", "15M+"], [307, "5tn&Jm", "Taes"], [308, "5bWlV0", "DX2X"], [309, "5E(Sju", "ZNSV"], [310, "5L>TE1", "GIUf"], [311, "5Wk(U8", "qXmC"], [312, "5YrnQV", "I5hW"], [313, "5GXfWu", "HCJ7"], [314, "5tVdEI", "Vh+S"], [315, "5U/hD(", "GCzb"], [316, "5IZzg_", "mXzD"], [317, "5ke)DQ", "G1PP"], [318, "5jCiO>", "d+5j"], [319, "5PFTP)", "LR9u"], [320, "59W%ux", "TKXs"], [321, "5CbJo=", "UPKZ"], [322, "55<&rV", "LlR3"], [323, "5bFbs2", "ZC0k"], [324, "5mhgDe", "FMf1"], [325, "540pNw", "kSmc"], [326, "5sFzw;", "0aqx"], [327, "5a!is.", "xEwI"], [328, "5?cDYF", "PWFX"], [329, "5kr3F.", "fhN9"], [330, "5mbKEa", "xG9v"], [331, "56Ydnt", "0mNI"], [332, "54H2j!", "3yrU"], [333, "5vTU!o", "sDCg"], [334, "5B5m\"X", "rwiv"], [335, "5E=E7k", "RH9J"], [336, "5=8F=P", "8IT/"]];
-const TOTAL_CODES = CODES.length;
 const ACCESS_PASSWORD = "verif2026";
 
 let html5Qr = null;
@@ -258,34 +267,80 @@ function docRef(id){
   return __fs.doc(__db, 'codigos', String(id));
 }
 
+async function getNextIndexStart(){
+  const recs = await loadAllRecords();
+  if(recs.length===0) return 1;
+  const maxIdx = Math.max(...recs.map(r=>r.index));
+  return maxIdx + 1;
+}
+
 async function seedDatabase(){
   const statusEl = document.getElementById('seed-status');
   const btn = document.getElementById('seed-btn');
+  const tandaNombre = document.getElementById('tanda-nombre').value.trim();
+  const pasteRaw = document.getElementById('tanda-paste').value.trim();
+
+  if(!tandaNombre){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Ingresá un nombre para esta tanda.';
+    return;
+  }
+  if(!pasteRaw){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Pegá el bloque de códigos.';
+    return;
+  }
+
+  let parsedCodes;
+  try{
+    parsedCodes = JSON.parse(pasteRaw);
+    if(!Array.isArray(parsedCodes) || parsedCodes.length===0) throw new Error('formato vacío o inválido');
+  }catch(e){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'El texto pegado no es un formato válido. Revisá que sea el bloque tal cual te lo paso.';
+    return;
+  }
+
   btn.disabled = true;
-  statusEl.textContent = 'Verificando si ya existen datos...';
-  const snap = await __fs.getDocs(colRef());
-  if(snap.size > 0){
-    statusEl.textContent = `Ya hay ${snap.size} códigos cargados. No se vuelve a cargar para evitar duplicados.`;
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Verificando duplicados...';
+
+  // cada item esperado: [gtin, serial, security]
+  await loadAllRecords();
+  const existingSerials = new Set(allRecords.map(r=>r.serial));
+  const dupes = parsedCodes.filter(c => existingSerials.has(c[1]));
+  if(dupes.length > 0){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = `Atención: ${dupes.length} código(s) ya existen en la base (mismo serial). No se cargó nada. Revisá si ya habías cargado esta tanda.`;
     btn.disabled = false;
     return;
   }
-  statusEl.textContent = `Cargando ${TOTAL_CODES} códigos...`;
-  // Firestore batch limit is 500 writes, we have 336 so one batch is enough
+
+  const startIdx = await getNextIndexStart();
+  statusEl.textContent = `Cargando ${parsedCodes.length} códigos (N° ${startIdx} a ${startIdx+parsedCodes.length-1})...`;
+
   const batch = __fs.writeBatch(__db);
-  CODES.forEach(([index, serial, security])=>{
-    batch.set(docRef(index), {
-      index: index,
-      gtin: "07798312320246",
+  parsedCodes.forEach((item, i)=>{
+    const [gtin, serial, security] = item;
+    const idx = startIdx + i;
+    batch.set(docRef(idx), {
+      index: idx,
+      gtin: gtin,
       serial: serial,
       security: security,
       lote: "",
       estado: "pendiente",
       operario: "",
-      fecha_pegado: null
+      fecha_pegado: null,
+      tanda: tandaNombre,
+      fecha_carga: new Date().toISOString()
     });
   });
   await batch.commit();
-  statusEl.textContent = `Listo. Se cargaron ${TOTAL_CODES} códigos con estado "pendiente".`;
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos de la tanda "${tandaNombre}" (N° ${startIdx} a ${startIdx+parsedCodes.length-1}).`;
+  document.getElementById('tanda-nombre').value = '';
+  document.getElementById('tanda-paste').value = '';
   btn.disabled = false;
   await refreshDashboard();
 }
@@ -319,9 +374,9 @@ document.getElementById('asig-btn').addEventListener('click', async ()=>{
   const idx = parseInt(document.getElementById('asig-index').value, 10);
   const lote = document.getElementById('asig-lote').value.trim();
   const statusEl = document.getElementById('asig-status');
-  if(!idx || idx<1 || idx>TOTAL_CODES){
+  if(!idx || idx<1){
     statusEl.style.color = 'var(--err)';
-    statusEl.textContent = `Ingresá un número entre 1 y ${TOTAL_CODES}.`;
+    statusEl.textContent = `Ingresá un número de código válido.`;
     return;
   }
   if(!lote){
@@ -348,7 +403,7 @@ document.getElementById('rango-btn').addEventListener('click', async ()=>{
   const hasta = parseInt(document.getElementById('rango-hasta').value, 10);
   const lote = document.getElementById('rango-lote').value.trim();
   const statusEl = document.getElementById('rango-status');
-  if(!desde || !hasta || desde<1 || hasta>TOTAL_CODES || desde>hasta){
+  if(!desde || !hasta || desde<1 || desde>hasta){
     statusEl.style.color = 'var(--err)';
     statusEl.textContent = 'Rango inválido.';
     return;
@@ -474,20 +529,49 @@ async function stopScan(){
 }
 
 // ---------- LISTADO ----------
+function populateTandaFilter(){
+  const sel = document.getElementById('filter-tanda');
+  const current = sel.value;
+  const tandas = [...new Set(allRecords.map(r=>r.tanda).filter(Boolean))];
+  sel.innerHTML = '<option value="">Todas las tandas</option>' +
+    tandas.map(t=>`<option value="${t}">${t}</option>`).join('');
+  if(tandas.includes(current)) sel.value = current;
+}
+
+function renderTandasList(){
+  const el = document.getElementById('tandas-list');
+  const tandas = [...new Set(allRecords.map(r=>r.tanda).filter(Boolean))];
+  if(tandas.length===0){
+    el.innerHTML = 'Todavía no hay tandas cargadas.';
+    return;
+  }
+  el.innerHTML = tandas.map(t=>{
+    const count = allRecords.filter(r=>r.tanda===t).length;
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">📦 <strong style="color:var(--text)">${t}</strong> — ${count} códigos</div>`;
+  }).join('');
+}
+
 function renderListado(){
   const filterVal = (document.getElementById('search-input').value || '').toLowerCase().trim();
+  const tandaVal = document.getElementById('filter-tanda').value;
   const tbody = document.getElementById('listado-body');
   const emptyEl = document.getElementById('listado-empty');
   tbody.innerHTML = '';
   let filtered = allRecords;
+  if(tandaVal){
+    filtered = filtered.filter(r=>r.tanda===tandaVal);
+  }
   if(filterVal){
-    filtered = allRecords.filter(r=>
+    filtered = filtered.filter(r=>
       String(r.index).includes(filterVal) ||
       (r.lote||'').toLowerCase().includes(filterVal) ||
       (r.estado||'').toLowerCase().includes(filterVal) ||
-      (r.operario||'').toLowerCase().includes(filterVal)
+      (r.operario||'').toLowerCase().includes(filterVal) ||
+      (r.tanda||'').toLowerCase().includes(filterVal)
     );
   }
+  populateTandaFilter();
+  renderTandasList();
   if(filtered.length===0){
     emptyEl.classList.remove('hidden');
     return;
@@ -497,9 +581,10 @@ function renderListado(){
   filtered.forEach(r=>{
     const tr = document.createElement('tr');
     const badgeClass = r.estado==='pegado' ? 'pegado' : (r.estado==='pendiente' ? 'pendiente' : 'duplicado');
-    const badgeLabel = r.estado==='pegado' ? 'Pegado OK' : (r.estado==='pendiente' ? 'Pendiente' : 'Duplicado');
+    const badgeLabel = r.estado==='pegado' ? 'Pegado OK' : (r.estado==='pendiente' ? 'Pendiente' : (r.estado==='duplicado_intento' ? 'Intento duplicado' : 'Pendiente'));
     tr.innerHTML = `
       <td><span class="index-pill">#${r.index}</span></td>
+      <td class="small">${r.tanda || '-'}</td>
       <td>${r.lote || '<span class="small">sin asignar</span>'}</td>
       <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
       <td>${r.operario || '-'}</td>
@@ -510,6 +595,7 @@ function renderListado(){
   tbody.appendChild(frag);
 }
 document.getElementById('search-input').addEventListener('input', renderListado);
+document.getElementById('filter-tanda').addEventListener('change', renderListado);
 
 // ---------- INIT ----------
 async function initApp(){
@@ -518,7 +604,5 @@ async function initApp(){
 
 checkLogin();
 </script>
-</body>
-</html>
 </body>
 </html>
