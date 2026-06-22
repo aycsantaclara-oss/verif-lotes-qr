@@ -77,6 +77,31 @@
   .empty{text-align:center;color:var(--muted);padding:24px 0;font-size:13px;}
   ::-webkit-scrollbar{width:6px;}
   ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+  .subnav{display:flex;gap:6px;margin-bottom:16px;background:var(--panel);border-radius:12px;padding:4px;flex-wrap:wrap;}
+  .subnav button{flex:1;min-width:80px;padding:9px 6px;border:none;background:transparent;color:var(--muted);border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;}
+  .subnav button.active{background:var(--accent);color:#fff;}
+  .stat-row{display:flex;gap:10px;margin-bottom:16px;}
+  .stat{flex:1;background:var(--panel2);border-radius:12px;padding:14px;text-align:center;}
+  .stat .n{font-size:22px;font-weight:700;}
+  .stat .l{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
+  .stat.ok .n{color:var(--ok);} .stat.pend .n{color:var(--warn);} .stat.err .n{color:var(--err);}
+  textarea{width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;font-family:monospace;resize:vertical;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px 6px;border-bottom:1px solid var(--border);}
+  td{padding:9px 6px;border-bottom:1px solid var(--border);}
+  tr:hover td{background:rgba(255,255,255,.02);}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.pendiente{background:rgba(234,179,8,.15);color:var(--warn);}
+  .badge.pegado{background:rgba(34,197,94,.15);color:var(--ok);}
+  .badge.duplicado{background:rgba(239,68,68,.15);color:var(--err);}
+  #reader{width:100%;border-radius:12px;overflow:hidden;}
+  .result-box{padding:16px;border-radius:12px;margin-top:12px;text-align:center;font-weight:600;font-size:15px;}
+  .result-box.ok{background:rgba(34,197,94,.12);border:1px solid var(--ok);color:var(--ok);}
+  .result-box.err{background:rgba(239,68,68,.12);border:1px solid var(--err);color:var(--err);}
+  .result-box.dup{background:rgba(234,179,8,.12);border:1px solid var(--warn);color:var(--warn);}
+  .index-pill{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--muted);font-family:monospace;}
+  .danger-zone{border:1px solid var(--err);}
 </style>
 </head>
 <body>
@@ -186,12 +211,94 @@
     </div>
   </div>
 
-  <!-- NIVEL 5: dentro del contenedor (placeholder por ahora, Parte 2 agrega PDF + escaneo) -->
+  <!-- NIVEL 5: dentro del contenedor -->
   <div id="view-contenedor-detalle" class="view hidden">
-    <div class="card">
-      <h2>Contenedor seleccionado</h2>
-      <p class="small">Acá en la Parte 2 vamos a agregar: subir PDF, ver/asignar códigos, escanear y verificar, y eliminar este contenedor. Por ahora confirmamos que la navegación funciona.</p>
-      <div id="contenedor-info" style="margin-top:10px;font-size:13px"></div>
+    <div class="subnav">
+      <button data-subtab="resumen" class="active">Resumen</button>
+      <button data-subtab="asignar">Asignar lote*</button>
+      <button data-subtab="escanear">Escanear</button>
+      <button data-subtab="listado">Listado</button>
+    </div>
+
+    <!-- SUB: RESUMEN -->
+    <div id="sub-resumen" class="subtab">
+      <div class="stat-row">
+        <div class="stat"><div class="n" id="stat-total">—</div><div class="l">Total</div></div>
+        <div class="stat ok"><div class="n" id="stat-pegado">—</div><div class="l">Pegados OK</div></div>
+        <div class="stat pend"><div class="n" id="stat-pendiente">—</div><div class="l">Pendientes</div></div>
+        <div class="stat err"><div class="n" id="stat-duplicado">—</div><div class="l">Duplicados</div></div>
+      </div>
+      <div class="card">
+        <h2>Cargar PDF de este contenedor</h2>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Subí el PDF de códigos en el chat de Claude. Te devuelvo un bloque de texto — pegalo acá y cargá. Quedan vinculados a este contenedor exclusivamente.</p>
+        <textarea id="pdf-paste" rows="4" placeholder='Pegá aquí el bloque que te paso, ej: [["07798312320246","5>,r&apos;H","ownG"], ...]'></textarea>
+        <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar códigos a este contenedor</button>
+        <div id="seed-status" class="small" style="margin-top:8px"></div>
+      </div>
+      <div class="card danger-zone">
+        <h2 style="color:var(--err)">Eliminar este contenedor</h2>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Borra el contenedor y TODOS los códigos cargados en él. No se puede deshacer.</p>
+        <button class="btn danger" id="delete-container-btn">Eliminar contenedor y sus códigos</button>
+        <div id="delete-status" class="small" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- SUB: ASIGNAR LOTE (nota: esto es lote interno del codigo individual si aplica, opcional) -->
+    <div id="sub-asignar" class="subtab hidden">
+      <div class="card">
+        <h2>Asignar referencia a un código puntual</h2>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">*Opcional: si dentro de este contenedor necesitás diferenciar sub-lotes o posiciones, asignalo por N° de código.</p>
+        <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="asig-index" type="number" min="1" placeholder="N° de código" />
+          <input id="asig-lote" type="text" placeholder="Referencia / sub-lote" />
+        </div>
+        <button class="btn" id="asig-btn">Guardar asignación</button>
+        <div id="asig-status" class="small" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h2>Asignación rápida en rango</h2>
+        <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="rango-desde" type="number" min="1" placeholder="Desde N°" />
+          <input id="rango-hasta" type="number" min="1" placeholder="Hasta N°" />
+          <input id="rango-lote" type="text" placeholder="Referencia" />
+        </div>
+        <button class="btn secondary" id="rango-btn">Asignar rango</button>
+        <div id="rango-status" class="small" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- SUB: ESCANEAR -->
+    <div id="sub-escanear" class="subtab hidden">
+      <div class="card">
+        <h2>Verificar código pegado</h2>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Escaneá el Data Matrix pegado en el lote/contenedor.</p>
+        <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="operario-input" type="text" placeholder="Tu nombre (operario)" />
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn secondary" id="start-scan-btn" style="flex:1">Iniciar cámara</button>
+          <button class="btn danger hidden" id="stop-scan-btn" style="flex:1">Detener</button>
+        </div>
+        <div id="reader"></div>
+        <div id="scan-result"></div>
+      </div>
+    </div>
+
+    <!-- SUB: LISTADO -->
+    <div id="sub-listado" class="subtab hidden">
+      <div class="card">
+        <h2>Códigos de este contenedor</h2>
+        <div class="search-bar" style="margin-bottom:10px">
+          <input id="search-input" type="text" placeholder="Buscar por N°, referencia o estado..." />
+        </div>
+        <div style="max-height:480px;overflow-y:auto">
+          <table>
+            <thead><tr><th>N°</th><th>Ref.</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
+            <tbody id="listado-body"></tbody>
+          </table>
+          <div id="listado-empty" class="empty hidden">Sin códigos cargados todavía.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -487,17 +594,349 @@ document.getElementById('crear-contenedor-btn').addEventListener('click', async 
   loadContenedores();
 });
 
-// ---------- DETALLE CONTENEDOR (placeholder, se completa en Parte 2) ----------
+// ---------- DETALLE CONTENEDOR ----------
+let allRecords = [];
+let html5Qr = null;
+let scanning = false;
+
 function loadContenedorDetalle(){
-  const el = document.getElementById('contenedor-info');
-  el.innerHTML = `
-    <div><strong>Tipo:</strong> ${state.tipo}</div>
-    <div><strong>Cliente:</strong> ${state.clienteNombre}</div>
-    <div><strong>Operación:</strong> ${state.operacionNombre}</div>
-    <div><strong>Lote:</strong> ${state.loteNombre}</div>
-    <div><strong>Contenedor:</strong> ${state.contenedorNombre}</div>
-  `;
+  // reset sub-nav to resumen
+  document.querySelectorAll('.subnav button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.subnav button[data-subtab="resumen"]').classList.add('active');
+  document.querySelectorAll('.subtab').forEach(t=>t.classList.add('hidden'));
+  document.getElementById('sub-resumen').classList.remove('hidden');
+  refreshContenedorStats();
 }
+
+document.querySelectorAll('.subnav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.subnav button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.subtab').forEach(t=>t.classList.add('hidden'));
+    document.getElementById('sub-'+btn.dataset.subtab).classList.remove('hidden');
+    if(btn.dataset.subtab !== 'escanear' && scanning) stopScan();
+    if(btn.dataset.subtab === 'listado') renderListado();
+  });
+});
+
+// ---------- FIRESTORE: codigos ligados a contenedorId ----------
+function codigosCol(){
+  return __fs.collection(__db, 'codigos');
+}
+function codigoDocRef(globalIndex){
+  return __fs.doc(__db, 'codigos', String(globalIndex));
+}
+
+async function loadCodigosDeContenedor(){
+  const q = __fs.query(codigosCol(), __fs.where('contenedorId','==', state.contenedorId));
+  const snap = await __fs.getDocs(q);
+  const recs = [];
+  snap.forEach(d=>recs.push(d.data()));
+  recs.sort((a,b)=>a.index-b.index);
+  allRecords = recs;
+  return recs;
+}
+
+async function getNextGlobalIndex(){
+  // indice global unico en toda la coleccion 'codigos' para no pisar otros contenedores
+  const snap = await __fs.getDocs(codigosCol());
+  let max = 0;
+  snap.forEach(d=>{ const idx = d.data().index || 0; if(idx>max) max = idx; });
+  return max + 1;
+}
+
+async function refreshContenedorStats(){
+  const recs = await loadCodigosDeContenedor();
+  const total = recs.length;
+  const pegado = recs.filter(r=>r.estado==='pegado').length;
+  const pendiente = recs.filter(r=>r.estado==='pendiente').length;
+  const duplicado = recs.filter(r=>r.estado==='duplicado_intento').length;
+  document.getElementById('stat-total').textContent = total || '0';
+  document.getElementById('stat-pegado').textContent = pegado;
+  document.getElementById('stat-pendiente').textContent = pendiente;
+  document.getElementById('stat-duplicado').textContent = duplicado;
+}
+
+// ---------- CARGAR PDF AL CONTENEDOR ----------
+document.getElementById('seed-btn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('seed-status');
+  const btn = document.getElementById('seed-btn');
+  const pasteRaw = document.getElementById('pdf-paste').value.trim();
+
+  if(!pasteRaw){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Pegá el bloque de códigos.';
+    return;
+  }
+  let parsedCodes;
+  try{
+    parsedCodes = JSON.parse(pasteRaw);
+    if(!Array.isArray(parsedCodes) || parsedCodes.length===0) throw new Error('vacío');
+  }catch(e){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'El texto pegado no es válido. Revisá que sea el bloque tal cual te lo paso.';
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Verificando duplicados...';
+
+  // chequeo de duplicados contra TODA la base (serial es único globalmente)
+  const allSnap = await __fs.getDocs(codigosCol());
+  const existingSerials = new Set();
+  allSnap.forEach(d=>existingSerials.add(d.data().serial));
+  const dupes = parsedCodes.filter(c => existingSerials.has(c[1]));
+  if(dupes.length > 0){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = `${dupes.length} código(s) ya existen en la base (mismo serial). No se cargó nada — revisá si esta tanda ya fue cargada antes.`;
+    btn.disabled = false;
+    return;
+  }
+
+  const startIdx = await getNextGlobalIndex();
+  statusEl.textContent = `Cargando ${parsedCodes.length} códigos...`;
+
+  const batch = __fs.writeBatch(__db);
+  parsedCodes.forEach((item, i)=>{
+    const [gtin, serial, security] = item;
+    const idx = startIdx + i;
+    batch.set(codigoDocRef(idx), {
+      index: idx,
+      gtin: gtin,
+      serial: serial,
+      security: security,
+      lote: "",
+      estado: "pendiente",
+      operario: "",
+      fecha_pegado: null,
+      contenedorId: state.contenedorId,
+      tipo: state.tipo,
+      cliente: state.clienteNombre,
+      operacion: state.operacionNombre,
+      loteNombre: state.loteNombre,
+      contenedorNombre: state.contenedorNombre,
+      fecha_carga: new Date().toISOString()
+    });
+  });
+  await batch.commit();
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos en este contenedor.`;
+  document.getElementById('pdf-paste').value = '';
+  btn.disabled = false;
+  await refreshContenedorStats();
+});
+
+// ---------- ELIMINAR CONTENEDOR ----------
+document.getElementById('delete-container-btn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('delete-status');
+  const confirmMsg = `¿Seguro que querés eliminar el contenedor "${state.contenedorNombre}" y TODOS sus códigos? Esta acción no se puede deshacer.`;
+  if(!confirm(confirmMsg)) return;
+
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Eliminando...';
+
+  const recs = await loadCodigosDeContenedor();
+  const batch = __fs.writeBatch(__db);
+  recs.forEach(r=>{
+    batch.delete(codigoDocRef(r.index));
+  });
+  await batch.commit();
+
+  await __fs.deleteDoc(__fs.doc(__db, 'jerarquia', state.contenedorId));
+
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = 'Contenedor eliminado.';
+  showToast('Contenedor "'+state.contenedorNombre+'" eliminado');
+  setTimeout(()=>{ goToView('contenedores'); }, 600);
+});
+
+// ---------- ASIGNAR REFERENCIA INDIVIDUAL ----------
+document.getElementById('asig-btn').addEventListener('click', async ()=>{
+  const idx = parseInt(document.getElementById('asig-index').value, 10);
+  const lote = document.getElementById('asig-lote').value.trim();
+  const statusEl = document.getElementById('asig-status');
+  if(!idx || idx<1){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Ingresá un número de código válido.';
+    return;
+  }
+  if(!lote){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Ingresá la referencia.';
+    return;
+  }
+  try{
+    await __fs.updateDoc(codigoDocRef(idx), { lote: lote });
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = `Código #${idx} asignado a "${lote}".`;
+    document.getElementById('asig-index').value = '';
+    document.getElementById('asig-lote').value = '';
+    await refreshContenedorStats();
+  }catch(e){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Error: ' + e.message;
+  }
+});
+
+document.getElementById('rango-btn').addEventListener('click', async ()=>{
+  const desde = parseInt(document.getElementById('rango-desde').value, 10);
+  const hasta = parseInt(document.getElementById('rango-hasta').value, 10);
+  const lote = document.getElementById('rango-lote').value.trim();
+  const statusEl = document.getElementById('rango-status');
+  if(!desde || !hasta || desde<1 || desde>hasta){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Rango inválido.';
+    return;
+  }
+  if(!lote){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Ingresá la referencia.';
+    return;
+  }
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Asignando...';
+  const batch = __fs.writeBatch(__db);
+  for(let i=desde;i<=hasta;i++){
+    batch.update(codigoDocRef(i), { lote: lote });
+  }
+  await batch.commit();
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = `Asignados ${hasta-desde+1} códigos al rango.`;
+  document.getElementById('rango-desde').value = '';
+  document.getElementById('rango-hasta').value = '';
+  document.getElementById('rango-lote').value = '';
+  await refreshContenedorStats();
+});
+
+// ---------- ESCANEAR ----------
+function findRecordByRawScan(rawText){
+  for(const r of allRecords){
+    if(rawText.indexOf(r.serial) !== -1){
+      return r;
+    }
+  }
+  return null;
+}
+
+function formatDate(iso){
+  if(!iso) return '-';
+  const d = new Date(iso);
+  return d.toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+async function handleScanSuccess(decodedText){
+  const operario = document.getElementById('operario-input').value.trim();
+  const resultBox = document.getElementById('scan-result');
+  if(!operario){
+    resultBox.innerHTML = `<div class="result-box err">Ingresá el nombre del operario antes de escanear.</div>`;
+    return;
+  }
+  if(allRecords.length === 0){
+    await loadCodigosDeContenedor();
+  }
+  const record = findRecordByRawScan(decodedText);
+  if(!record){
+    resultBox.innerHTML = `<div class="result-box err">⚠ Código no reconocido.<div class="small">No corresponde a los códigos cargados en este contenedor.</div></div>`;
+    showToast('Código no reconocido');
+    return;
+  }
+  if(record.estado === 'pegado'){
+    resultBox.innerHTML = `<div class="result-box dup">⚠ DUPLICADO — Código #${record.index}<div class="small">Ya fue verificado el ${formatDate(record.fecha_pegado)} por ${record.operario}.</div></div>`;
+    showToast('Código duplicado #'+record.index);
+    await __fs.updateDoc(codigoDocRef(record.index), { estado: 'duplicado_intento', ultimo_intento_operario: operario, ultimo_intento_fecha: new Date().toISOString() });
+    return;
+  }
+  const now = new Date().toISOString();
+  await __fs.updateDoc(codigoDocRef(record.index), {
+    estado: 'pegado',
+    operario: operario,
+    fecha_pegado: now
+  });
+  record.estado='pegado'; record.operario=operario; record.fecha_pegado=now;
+  resultBox.innerHTML = `<div class="result-box ok">✓ OK — Código #${record.index}<div class="small">Registrado correctamente</div></div>`;
+  showToast('✓ Código #'+record.index+' verificado');
+  refreshContenedorStats();
+}
+
+document.getElementById('start-scan-btn').addEventListener('click', async ()=>{
+  if(allRecords.length===0) await loadCodigosDeContenedor();
+  document.getElementById('start-scan-btn').classList.add('hidden');
+  document.getElementById('stop-scan-btn').classList.remove('hidden');
+  document.getElementById('scan-result').innerHTML = '';
+  html5Qr = new Html5Qrcode("reader");
+  scanning = true;
+  let lastScan = '';
+  let lastScanTime = 0;
+  try{
+    await html5Qr.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ] },
+      (decodedText) => {
+        const now = Date.now();
+        if(decodedText === lastScan && (now-lastScanTime) < 3000) return;
+        lastScan = decodedText;
+        lastScanTime = now;
+        handleScanSuccess(decodedText);
+      },
+      (errorMsg) => { /* ignore per-frame errors */ }
+    );
+  }catch(e){
+    showToast('No se pudo iniciar la cámara: '+e.message, 4000);
+    stopScan();
+  }
+});
+
+document.getElementById('stop-scan-btn').addEventListener('click', stopScan);
+async function stopScan(){
+  if(html5Qr && scanning){
+    try{ await html5Qr.stop(); html5Qr.clear(); }catch(e){}
+  }
+  scanning = false;
+  document.getElementById('start-scan-btn').classList.remove('hidden');
+  document.getElementById('stop-scan-btn').classList.add('hidden');
+}
+
+// ---------- LISTADO ----------
+function renderListado(){
+  const filterVal = (document.getElementById('search-input').value || '').toLowerCase().trim();
+  const tbody = document.getElementById('listado-body');
+  const emptyEl = document.getElementById('listado-empty');
+  tbody.innerHTML = '';
+  let filtered = allRecords;
+  if(filterVal){
+    filtered = filtered.filter(r=>
+      String(r.index).includes(filterVal) ||
+      (r.lote||'').toLowerCase().includes(filterVal) ||
+      (r.estado||'').toLowerCase().includes(filterVal) ||
+      (r.operario||'').toLowerCase().includes(filterVal)
+    );
+  }
+  if(filtered.length===0){
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  const frag = document.createDocumentFragment();
+  filtered.forEach(r=>{
+    const tr = document.createElement('tr');
+    const badgeClass = r.estado==='pegado' ? 'pegado' : (r.estado==='pendiente' ? 'pendiente' : 'duplicado');
+    const badgeLabel = r.estado==='pegado' ? 'Pegado OK' : (r.estado==='pendiente' ? 'Pendiente' : (r.estado==='duplicado_intento' ? 'Intento duplicado' : 'Pendiente'));
+    tr.innerHTML = `
+      <td><span class="index-pill">#${r.index}</span></td>
+      <td>${r.lote || '<span class="small">-</span>'}</td>
+      <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+      <td>${r.operario || '-'}</td>
+      <td>${formatDate(r.fecha_pegado)}</td>
+    `;
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+}
+document.getElementById('search-input').addEventListener('input', renderListado);
 
 checkLogin();
 </script>
