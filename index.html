@@ -7,7 +7,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc,
+    getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
     query, where, writeBatch, onSnapshot, orderBy
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -25,7 +25,7 @@
 
   window.__db = db;
   window.__fs = {
-    collection, doc, getDoc, getDocs, setDoc, updateDoc,
+    collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
     query, where, writeBatch, onSnapshot, orderBy
   };
 </script>
@@ -39,51 +39,42 @@
   *{box-sizing:border-box;}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
   .wrap{max-width:760px;margin:0 auto;padding:20px 16px 80px;}
-  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:10px;}
   header h1{font-size:18px;margin:0;font-weight:600;}
   header h1 span{color:var(--muted);font-weight:400;font-size:13px;display:block;margin-top:2px;}
-  nav{display:flex;gap:6px;margin-bottom:20px;background:var(--panel);border-radius:12px;padding:4px;}
-  nav button{flex:1;padding:10px 8px;border:none;background:transparent;color:var(--muted);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;}
-  nav button.active{background:var(--accent);color:#fff;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:14px;}
   .card h2{font-size:15px;margin:0 0 12px;color:var(--text);}
-  .stat-row{display:flex;gap:10px;margin-bottom:16px;}
-  .stat{flex:1;background:var(--panel2);border-radius:12px;padding:14px;text-align:center;}
-  .stat .n{font-size:24px;font-weight:700;}
-  .stat .l{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
-  .stat.ok .n{color:var(--ok);} .stat.pend .n{color:var(--warn);} .stat.err .n{color:var(--err);}
   button.btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;width:100%;}
   button.btn:hover{background:var(--accent2);}
   button.btn:disabled{opacity:.4;cursor:not-allowed;}
   button.btn.secondary{background:var(--panel2);border:1px solid var(--border);color:var(--text);}
   button.btn.danger{background:var(--err);}
+  button.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted);width:auto;padding:8px 14px;font-size:12px;}
   input,select{width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;}
   input:focus,select:focus{outline:none;border-color:var(--accent);}
-  .row{display:flex;gap:8px;}
-  .row > *{flex:1;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px 6px;border-bottom:1px solid var(--border);}
-  td{padding:9px 6px;border-bottom:1px solid var(--border);}
-  tr:hover td{background:rgba(255,255,255,.02);}
-  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
-  .badge.pendiente{background:rgba(234,179,8,.15);color:var(--warn);}
-  .badge.pegado{background:rgba(34,197,94,.15);color:var(--ok);}
-  .badge.duplicado{background:rgba(239,68,68,.15);color:var(--err);}
-  #reader{width:100%;border-radius:12px;overflow:hidden;}
-  .result-box{padding:16px;border-radius:12px;margin-top:12px;text-align:center;font-weight:600;font-size:15px;}
-  .result-box.ok{background:rgba(34,197,94,.12);border:1px solid var(--ok);color:var(--ok);}
-  .result-box.err{background:rgba(239,68,68,.12);border:1px solid var(--err);color:var(--err);}
-  .result-box.dup{background:rgba(234,179,8,.12);border:1px solid var(--warn);color:var(--warn);}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .field{margin-bottom:14px;}
   .small{font-size:12px;color:var(--muted);margin-top:4px;font-weight:400;}
   .hidden{display:none !important;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border);padding:12px 20px;border-radius:10px;font-size:13px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.4);}
-  .search-bar{margin-bottom:12px;}
-  .empty{text-align:center;color:var(--muted);padding:30px 0;font-size:13px;}
-  .scan-toggle{display:flex;gap:8px;margin-bottom:12px;}
-  .index-pill{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--muted);font-family:monospace;}
   .login-card{max-width:340px;margin:60px auto 0;}
   .login-card h1{text-align:center;font-size:20px;margin-bottom:4px;}
   .login-card p{text-align:center;color:var(--muted);font-size:13px;margin-bottom:20px;}
+  .breadcrumb{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:16px;}
+  .breadcrumb .crumb{cursor:pointer;color:var(--accent);}
+  .breadcrumb .crumb:hover{text-decoration:underline;}
+  .breadcrumb .sep{color:var(--border);}
+  .type-choice{display:flex;gap:14px;margin-top:10px;}
+  .type-btn{flex:1;background:var(--panel2);border:2px solid var(--border);border-radius:14px;padding:28px 14px;text-align:center;cursor:pointer;transition:.15s;}
+  .type-btn:hover{border-color:var(--accent);}
+  .type-btn .icon{font-size:34px;margin-bottom:8px;}
+  .type-btn .label{font-size:15px;font-weight:700;}
+  .list-item{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:.15s;}
+  .list-item:hover{border-color:var(--accent);}
+  .list-item .main{font-size:14px;font-weight:600;}
+  .list-item .sub{font-size:11px;color:var(--muted);margin-top:2px;}
+  .list-item .arrow{color:var(--muted);font-size:18px;}
+  .empty{text-align:center;color:var(--muted);padding:24px 0;font-size:13px;}
   ::-webkit-scrollbar{width:6px;}
   ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
 </style>
@@ -105,101 +96,105 @@
 <div id="app-screen" class="wrap hidden">
   <header>
     <h1>QR Clientes <span>Verificación de lotes pegados</span></h1>
-    <button class="btn secondary" style="width:auto;padding:8px 14px;font-size:12px" id="logout-btn">Salir</button>
+    <button class="btn ghost" id="logout-btn">Salir</button>
   </header>
 
-  <nav>
-    <button data-tab="dashboard" class="active">Resumen</button>
-    <button data-tab="asignar">Asignar lote</button>
-    <button data-tab="escanear">Escanear</button>
-    <button data-tab="listado">Listado</button>
-  </nav>
+  <div id="breadcrumb" class="breadcrumb"></div>
 
-  <!-- DASHBOARD -->
-  <div id="tab-dashboard" class="tab">
-    <div class="stat-row">
-      <div class="stat"><div class="n" id="stat-total">—</div><div class="l">Total</div></div>
-      <div class="stat ok"><div class="n" id="stat-pegado">—</div><div class="l">Pegados OK</div></div>
-      <div class="stat pend"><div class="n" id="stat-pendiente">—</div><div class="l">Pendientes</div></div>
-      <div class="stat err"><div class="n" id="stat-duplicado">—</div><div class="l">Duplicados</div></div>
-    </div>
+  <!-- NIVEL 0: elegir Cajas / Bins -->
+  <div id="view-tipo" class="view">
     <div class="card">
-      <h2>Cargar nueva tanda de códigos</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Cuando tengas un PDF nuevo, pasámelo en el chat. Te devuelvo un bloque de texto — pegalo acá tal cual y cargá. Los números de código siguen la numeración automáticamente (no se pisan con tandas anteriores).</p>
-      <div class="row" style="margin-bottom:10px">
-        <input id="tanda-nombre" type="text" placeholder="Nombre de esta tanda (ej: Cliente Pérez - OP920)" />
+      <h2>Seleccioná el producto</h2>
+      <div class="type-choice">
+        <div class="type-btn" data-tipo="Cajas">
+          <div class="icon">📦</div>
+          <div class="label">Cajas</div>
+        </div>
+        <div class="type-btn" data-tipo="Bins">
+          <div class="icon">🗃️</div>
+          <div class="label">Bins</div>
+        </div>
       </div>
-      <textarea id="tanda-paste" rows="4" placeholder='Pegá aquí el bloque que te paso, ej: [["07798312320246","5>,r&apos;H","ownG"], ...]' style="width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
-      <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar esta tanda a Firestore</button>
-      <div id="seed-status" class="small" style="margin-top:8px"></div>
-    </div>
-    <div class="card">
-      <h2>Tandas cargadas</h2>
-      <div id="tandas-list" class="small"></div>
     </div>
   </div>
 
-  <!-- ASIGNAR LOTE -->
-  <div id="tab-asignar" class="tab hidden">
+  <!-- NIVEL 1: listado de Clientes dentro del tipo elegido + crear nuevo -->
+  <div id="view-clientes" class="view hidden">
     <div class="card">
-      <h2>Asignar lote a cada código</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Elegí el código por su número correlativo y asignale el lote correspondiente.</p>
-      <div class="row" style="margin-bottom:10px">
-        <input id="asig-index" type="number" min="1" placeholder="N° de código" />
-        <input id="asig-lote" type="text" placeholder="Lote (ej: L-001)" />
-      </div>
-      <button class="btn" id="asig-btn">Guardar asignación</button>
-      <div id="asig-status" class="small" style="margin-top:8px"></div>
+      <h2>Clientes</h2>
+      <div id="clientes-list"></div>
+      <div id="clientes-empty" class="empty hidden">Todavía no hay clientes en esta categoría.</div>
     </div>
     <div class="card">
-      <h2>Asignación rápida en rango</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Asigná el mismo lote a un rango de códigos consecutivos.</p>
-      <div class="row" style="margin-bottom:10px">
-        <input id="rango-desde" type="number" min="1" placeholder="Desde N°" />
-        <input id="rango-hasta" type="number" min="1" placeholder="Hasta N°" />
-        <input id="rango-lote" type="text" placeholder="Lote" />
+      <h2>Nuevo cliente</h2>
+      <div class="field">
+        <label>Nombre del cliente</label>
+        <input id="nuevo-cliente-input" type="text" placeholder="Ej: Cliente Pérez" />
       </div>
-      <button class="btn secondary" id="rango-btn">Asignar rango</button>
-      <div id="rango-status" class="small" style="margin-top:8px"></div>
+      <button class="btn secondary" id="crear-cliente-btn">Crear cliente</button>
     </div>
   </div>
 
-  <!-- ESCANEAR -->
-  <div id="tab-escanear" class="tab hidden">
+  <!-- NIVEL 2: listado de Operaciones dentro del cliente -->
+  <div id="view-operaciones" class="view hidden">
     <div class="card">
-      <h2>Verificar código pegado</h2>
-      <p class="small" style="margin-top:-6px;margin-bottom:12px">Escaneá el Data Matrix pegado en el lote. La app valida que exista, que no haya sido escaneado antes, y marca la trazabilidad.</p>
-      <div class="row" style="margin-bottom:10px">
-        <input id="operario-input" type="text" placeholder="Tu nombre (operario)" />
+      <h2>Operaciones</h2>
+      <div id="operaciones-list"></div>
+      <div id="operaciones-empty" class="empty hidden">Todavía no hay operaciones para este cliente.</div>
+    </div>
+    <div class="card">
+      <h2>Nueva operación</h2>
+      <div class="field">
+        <label>Nombre / N° de operación</label>
+        <input id="nueva-operacion-input" type="text" placeholder="Ej: OP-920" />
       </div>
-      <div class="scan-toggle">
-        <button class="btn secondary" id="start-scan-btn" style="flex:1">Iniciar cámara</button>
-        <button class="btn danger hidden" id="stop-scan-btn" style="flex:1">Detener</button>
-      </div>
-      <div id="reader"></div>
-      <div id="scan-result"></div>
+      <button class="btn secondary" id="crear-operacion-btn">Crear operación</button>
     </div>
   </div>
 
-  <!-- LISTADO -->
-  <div id="tab-listado" class="tab hidden">
+  <!-- NIVEL 3: listado de Lotes dentro de la operación -->
+  <div id="view-lotes" class="view hidden">
     <div class="card">
-      <h2>Listado completo</h2>
-      <div class="row" style="margin-bottom:10px">
-        <select id="filter-tanda"><option value="">Todas las tandas</option></select>
+      <h2>Lotes</h2>
+      <div id="lotes-list"></div>
+      <div id="lotes-empty" class="empty hidden">Todavía no hay lotes para esta operación.</div>
+    </div>
+    <div class="card">
+      <h2>Nuevo lote</h2>
+      <div class="field">
+        <label>N° de lote</label>
+        <input id="nuevo-lote-input" type="text" placeholder="Ej: L-001" />
       </div>
-      <div class="search-bar">
-        <input id="search-input" type="text" placeholder="Buscar por N°, lote o estado..." />
-      </div>
-      <div style="max-height:520px;overflow-y:auto">
-        <table>
-          <thead><tr><th>N°</th><th>Tanda</th><th>Lote</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
-          <tbody id="listado-body"></tbody>
-        </table>
-        <div id="listado-empty" class="empty hidden">Sin resultados.</div>
-      </div>
+      <button class="btn secondary" id="crear-lote-btn">Crear lote</button>
     </div>
   </div>
+
+  <!-- NIVEL 4: listado de Contenedores dentro del lote -->
+  <div id="view-contenedores" class="view hidden">
+    <div class="card">
+      <h2>Contenedores</h2>
+      <div id="contenedores-list"></div>
+      <div id="contenedores-empty" class="empty hidden">Todavía no hay contenedores para este lote.</div>
+    </div>
+    <div class="card">
+      <h2>Nuevo contenedor</h2>
+      <div class="field">
+        <label>N° de contenedor</label>
+        <input id="nuevo-contenedor-input" type="text" placeholder="Ej: CONT-01" />
+      </div>
+      <button class="btn secondary" id="crear-contenedor-btn">Crear contenedor</button>
+    </div>
+  </div>
+
+  <!-- NIVEL 5: dentro del contenedor (placeholder por ahora, Parte 2 agrega PDF + escaneo) -->
+  <div id="view-contenedor-detalle" class="view hidden">
+    <div class="card">
+      <h2>Contenedor seleccionado</h2>
+      <p class="small">Acá en la Parte 2 vamos a agregar: subir PDF, ver/asignar códigos, escanear y verificar, y eliminar este contenedor. Por ahora confirmamos que la navegación funciona.</p>
+      <div id="contenedor-info" style="margin-top:10px;font-size:13px"></div>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast" class="toast hidden"></div>
@@ -207,9 +202,14 @@
 <script>
 const ACCESS_PASSWORD = "verif2026";
 
-let html5Qr = null;
-let scanning = false;
-let allRecords = [];
+// Estado de navegación actual
+let state = {
+  tipo: null,       // "Cajas" | "Bins"
+  clienteId: null, clienteNombre: null,
+  operacionId: null, operacionNombre: null,
+  loteId: null, loteNombre: null,
+  contenedorId: null, contenedorNombre: null
+};
 
 function showToast(msg, ms=2500){
   const t = document.getElementById('toast');
@@ -224,7 +224,7 @@ function checkLogin(){
   if(sessionStorage.getItem('qrc_auth') === '1'){
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app-screen').classList.remove('hidden');
-    initApp();
+    goToView('tipo');
   } else {
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('app-screen').classList.add('hidden');
@@ -244,362 +244,259 @@ document.getElementById('login-pass').addEventListener('keydown', e=>{
 });
 document.getElementById('logout-btn').addEventListener('click', ()=>{
   sessionStorage.removeItem('qrc_auth');
-  if(scanning) stopScan();
   checkLogin();
 });
 
-// ---------- TABS ----------
-document.querySelectorAll('nav button').forEach(btn=>{
+// ---------- NAVEGACIÓN ----------
+const VIEWS = ['tipo','clientes','operaciones','lotes','contenedores','contenedor-detalle'];
+
+function goToView(name){
+  VIEWS.forEach(v=>{
+    const el = document.getElementById('view-'+v);
+    if(el) el.classList.toggle('hidden', v!==name);
+  });
+  renderBreadcrumb(name);
+  if(name==='clientes') loadClientes();
+  if(name==='operaciones') loadOperaciones();
+  if(name==='lotes') loadLotes();
+  if(name==='contenedores') loadContenedores();
+  if(name==='contenedor-detalle') loadContenedorDetalle();
+}
+
+function renderBreadcrumb(current){
+  const bc = document.getElementById('breadcrumb');
+  const parts = [];
+  parts.push({label:'Inicio', view:'tipo'});
+  if(state.tipo) parts.push({label:state.tipo, view:'clientes'});
+  if(state.clienteNombre) parts.push({label:state.clienteNombre, view:'operaciones'});
+  if(state.operacionNombre) parts.push({label:state.operacionNombre, view:'lotes'});
+  if(state.loteNombre) parts.push({label:state.loteNombre, view:'contenedores'});
+  if(state.contenedorNombre) parts.push({label:state.contenedorNombre, view:'contenedor-detalle'});
+
+  bc.innerHTML = parts.map((p,i)=>{
+    const isLast = i===parts.length-1;
+    const sep = i>0 ? '<span class="sep">›</span>' : '';
+    return sep + `<span class="crumb" data-go="${p.view}" style="${isLast?'color:var(--text);font-weight:600;cursor:default;text-decoration:none':''}">${p.label}</span>`;
+  }).join('');
+
+  bc.querySelectorAll('.crumb').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const target = el.dataset.go;
+      if(target === current) return;
+      goToView(target);
+    });
+  });
+}
+
+// Click en botones Cajas / Bins
+document.querySelectorAll('.type-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelectorAll('.tab').forEach(t=>t.classList.add('hidden'));
-    document.getElementById('tab-'+btn.dataset.tab).classList.remove('hidden');
-    if(btn.dataset.tab !== 'escanear' && scanning) stopScan();
+    state.tipo = btn.dataset.tipo;
+    state.clienteId = state.clienteNombre = null;
+    state.operacionId = state.operacionNombre = null;
+    state.loteId = state.loteNombre = null;
+    state.contenedorId = state.contenedorNombre = null;
+    goToView('clientes');
   });
 });
 
 // ---------- FIRESTORE HELPERS ----------
-function colRef(){
-  return __fs.collection(__db, 'codigos');
-}
-function docRef(id){
-  return __fs.doc(__db, 'codigos', String(id));
-}
-
-async function getNextIndexStart(){
-  const recs = await loadAllRecords();
-  if(recs.length===0) return 1;
-  const maxIdx = Math.max(...recs.map(r=>r.index));
-  return maxIdx + 1;
+// Estructura: coleccion 'jerarquia', cada doc tiene: tipoCampo (tipo/cliente/operacion/lote/contenedor),
+// nombre, parentId (id del padre o null si es raiz), tipoRaiz (Cajas/Bins, se propaga a todos los hijos)
+function jerarquiaCol(){
+  return __fs.collection(__db, 'jerarquia');
 }
 
-async function seedDatabase(){
-  const statusEl = document.getElementById('seed-status');
-  const btn = document.getElementById('seed-btn');
-  const tandaNombre = document.getElementById('tanda-nombre').value.trim();
-  const pasteRaw = document.getElementById('tanda-paste').value.trim();
-
-  if(!tandaNombre){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Ingresá un nombre para esta tanda.';
-    return;
-  }
-  if(!pasteRaw){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Pegá el bloque de códigos.';
-    return;
-  }
-
-  let parsedCodes;
-  try{
-    parsedCodes = JSON.parse(pasteRaw);
-    if(!Array.isArray(parsedCodes) || parsedCodes.length===0) throw new Error('formato vacío o inválido');
-  }catch(e){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'El texto pegado no es un formato válido. Revisá que sea el bloque tal cual te lo paso.';
-    return;
-  }
-
-  btn.disabled = true;
-  statusEl.style.color = 'var(--text)';
-  statusEl.textContent = 'Verificando duplicados...';
-
-  // cada item esperado: [gtin, serial, security]
-  await loadAllRecords();
-  const existingSerials = new Set(allRecords.map(r=>r.serial));
-  const dupes = parsedCodes.filter(c => existingSerials.has(c[1]));
-  if(dupes.length > 0){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = `Atención: ${dupes.length} código(s) ya existen en la base (mismo serial). No se cargó nada. Revisá si ya habías cargado esta tanda.`;
-    btn.disabled = false;
-    return;
-  }
-
-  const startIdx = await getNextIndexStart();
-  statusEl.textContent = `Cargando ${parsedCodes.length} códigos (N° ${startIdx} a ${startIdx+parsedCodes.length-1})...`;
-
-  const batch = __fs.writeBatch(__db);
-  parsedCodes.forEach((item, i)=>{
-    const [gtin, serial, security] = item;
-    const idx = startIdx + i;
-    batch.set(docRef(idx), {
-      index: idx,
-      gtin: gtin,
-      serial: serial,
-      security: security,
-      lote: "",
-      estado: "pendiente",
-      operario: "",
-      fecha_pegado: null,
-      tanda: tandaNombre,
-      fecha_carga: new Date().toISOString()
-    });
-  });
-  await batch.commit();
-  statusEl.style.color = 'var(--ok)';
-  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos de la tanda "${tandaNombre}" (N° ${startIdx} a ${startIdx+parsedCodes.length-1}).`;
-  document.getElementById('tanda-nombre').value = '';
-  document.getElementById('tanda-paste').value = '';
-  btn.disabled = false;
-  await refreshDashboard();
-}
-document.getElementById('seed-btn').addEventListener('click', seedDatabase);
-
-// ---------- LOAD ALL RECORDS ----------
-async function loadAllRecords(){
-  const snap = await __fs.getDocs(colRef());
-  const recs = [];
-  snap.forEach(d=>recs.push(d.data()));
-  recs.sort((a,b)=>a.index-b.index);
-  allRecords = recs;
-  return recs;
+async function crearNodo(nivel, nombre, parentId){
+  const data = {
+    nivel: nivel, // 'cliente' | 'operacion' | 'lote' | 'contenedor'
+    nombre: nombre,
+    parentId: parentId || null,
+    tipoRaiz: state.tipo,
+    fecha_creacion: new Date().toISOString()
+  };
+  const ref = __fs.doc(jerarquiaCol());
+  await __fs.setDoc(ref, data);
+  return ref.id;
 }
 
-async function refreshDashboard(){
-  const recs = await loadAllRecords();
-  const total = recs.length;
-  const pegado = recs.filter(r=>r.estado==='pegado').length;
-  const pendiente = recs.filter(r=>r.estado==='pendiente').length;
-  const duplicado = recs.filter(r=>r.estado==='duplicado').length;
-  document.getElementById('stat-total').textContent = total || '0';
-  document.getElementById('stat-pegado').textContent = pegado;
-  document.getElementById('stat-pendiente').textContent = pendiente;
-  document.getElementById('stat-duplicado').textContent = duplicado;
-  renderListado();
+async function listarHijos(nivel, parentId){
+  const q = __fs.query(jerarquiaCol(),
+    __fs.where('nivel','==',nivel),
+    __fs.where('parentId','==', parentId || null)
+  );
+  const snap = await __fs.getDocs(q);
+  const out = [];
+  snap.forEach(d=>out.push({id:d.id, ...d.data()}));
+  out.sort((a,b)=> (a.nombre||'').localeCompare(b.nombre||''));
+  return out;
 }
 
-// ---------- ASIGNAR LOTE (individual) ----------
-document.getElementById('asig-btn').addEventListener('click', async ()=>{
-  const idx = parseInt(document.getElementById('asig-index').value, 10);
-  const lote = document.getElementById('asig-lote').value.trim();
-  const statusEl = document.getElementById('asig-status');
-  if(!idx || idx<1){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = `Ingresá un número de código válido.`;
-    return;
-  }
-  if(!lote){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Ingresá el lote.';
-    return;
-  }
-  try{
-    await __fs.updateDoc(docRef(idx), { lote: lote });
-    statusEl.style.color = 'var(--ok)';
-    statusEl.textContent = `Código #${idx} asignado al lote "${lote}".`;
-    document.getElementById('asig-index').value = '';
-    document.getElementById('asig-lote').value = '';
-    await refreshDashboard();
-  }catch(e){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Error: ' + e.message;
-  }
-});
+// ---------- CLIENTES ----------
+async function loadClientes(){
+  const listEl = document.getElementById('clientes-list');
+  const emptyEl = document.getElementById('clientes-empty');
+  listEl.innerHTML = '<div class="small">Cargando...</div>';
+  // clientes raíz: parentId = tipoRaiz actual (usamos tipoRaiz como filtro, parentId null para nivel cliente)
+  const q = __fs.query(jerarquiaCol(),
+    __fs.where('nivel','==','cliente'),
+    __fs.where('tipoRaiz','==', state.tipo)
+  );
+  const snap = await __fs.getDocs(q);
+  const clientes = [];
+  snap.forEach(d=>clientes.push({id:d.id, ...d.data()}));
+  clientes.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
 
-// ---------- ASIGNAR RANGO ----------
-document.getElementById('rango-btn').addEventListener('click', async ()=>{
-  const desde = parseInt(document.getElementById('rango-desde').value, 10);
-  const hasta = parseInt(document.getElementById('rango-hasta').value, 10);
-  const lote = document.getElementById('rango-lote').value.trim();
-  const statusEl = document.getElementById('rango-status');
-  if(!desde || !hasta || desde<1 || desde>hasta){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Rango inválido.';
-    return;
-  }
-  if(!lote){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Ingresá el lote.';
-    return;
-  }
-  statusEl.style.color = 'var(--text)';
-  statusEl.textContent = 'Asignando...';
-  const batch = __fs.writeBatch(__db);
-  for(let i=desde;i<=hasta;i++){
-    batch.update(docRef(i), { lote: lote });
-  }
-  await batch.commit();
-  statusEl.style.color = 'var(--ok)';
-  statusEl.textContent = `Asignados ${hasta-desde+1} códigos (N° ${desde} a ${hasta}) al lote "${lote}".`;
-  document.getElementById('rango-desde').value = '';
-  document.getElementById('rango-hasta').value = '';
-  document.getElementById('rango-lote').value = '';
-  await refreshDashboard();
-});
-
-// ---------- ESCANEAR ----------
-function extractSerialFromRaw(rawText){
-  // GS1 Data Matrix format: 01 + 14 digit GTIN + 21 + serial + GS(\x1d) + 93 + security
-  // We only need to match against known serials, so just check containment
-  return rawText;
-}
-
-function findRecordByRawScan(rawText){
-  // The raw scanned text should contain the serial string embedded after AI(21)
-  // Try direct match: does rawText include record.serial as substring?
-  for(const r of allRecords){
-    if(rawText.indexOf(r.serial) !== -1){
-      return r;
-    }
-  }
-  return null;
-}
-
-async function handleScanSuccess(decodedText){
-  const operario = document.getElementById('operario-input').value.trim();
-  const resultBox = document.getElementById('scan-result');
-  if(!operario){
-    resultBox.innerHTML = `<div class="result-box err">Ingresá el nombre del operario antes de escanear.</div>`;
-    return;
-  }
-  if(allRecords.length === 0){
-    await loadAllRecords();
-  }
-  const record = findRecordByRawScan(decodedText);
-  if(!record){
-    resultBox.innerHTML = `<div class="result-box err">⚠ Código no reconocido.<div class="small">No corresponde a la lista cargada. Puede ser un código ajeno o adulterado.</div></div>`;
-    showToast('Código no reconocido');
-    return;
-  }
-  if(record.estado === 'pegado'){
-    resultBox.innerHTML = `<div class="result-box dup">⚠ DUPLICADO — Código #${record.index}<div class="small">Ya fue verificado el ${formatDate(record.fecha_pegado)} por ${record.operario}. Lote: ${record.lote||'(sin asignar)'}</div></div>`;
-    showToast('Código duplicado #'+record.index);
-    // mark as duplicado flag too, but keep original pegado data
-    await __fs.updateDoc(docRef(record.index), { estado: 'duplicado_intento', ultimo_intento_operario: operario, ultimo_intento_fecha: new Date().toISOString() });
-    return;
-  }
-  const now = new Date().toISOString();
-  await __fs.updateDoc(docRef(record.index), {
-    estado: 'pegado',
-    operario: operario,
-    fecha_pegado: now
-  });
-  record.estado='pegado'; record.operario=operario; record.fecha_pegado=now;
-  resultBox.innerHTML = `<div class="result-box ok">✓ OK — Código #${record.index}<div class="small">Lote: ${record.lote || '(sin asignar)'} — registrado correctamente</div></div>`;
-  showToast('✓ Código #'+record.index+' verificado');
-  refreshDashboard();
-}
-
-function formatDate(iso){
-  if(!iso) return '-';
-  const d = new Date(iso);
-  return d.toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-}
-
-document.getElementById('start-scan-btn').addEventListener('click', async ()=>{
-  if(allRecords.length===0) await loadAllRecords();
-  document.getElementById('start-scan-btn').classList.add('hidden');
-  document.getElementById('stop-scan-btn').classList.remove('hidden');
-  document.getElementById('scan-result').innerHTML = '';
-  html5Qr = new Html5Qrcode("reader");
-  scanning = true;
-  let lastScan = '';
-  let lastScanTime = 0;
-  try{
-    await html5Qr.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport: [
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-          Html5QrcodeSupportedFormats.QR_CODE
-        ] },
-      (decodedText) => {
-        const now = Date.now();
-        if(decodedText === lastScan && (now-lastScanTime) < 3000) return; // debounce repeated reads
-        lastScan = decodedText;
-        lastScanTime = now;
-        handleScanSuccess(decodedText);
-      },
-      (errorMsg) => { /* ignore per-frame scan errors */ }
-    );
-  }catch(e){
-    showToast('No se pudo iniciar la cámara: '+e.message, 4000);
-    stopScan();
-  }
-});
-
-document.getElementById('stop-scan-btn').addEventListener('click', stopScan);
-async function stopScan(){
-  if(html5Qr && scanning){
-    try{ await html5Qr.stop(); html5Qr.clear(); }catch(e){}
-  }
-  scanning = false;
-  document.getElementById('start-scan-btn').classList.remove('hidden');
-  document.getElementById('stop-scan-btn').classList.add('hidden');
-}
-
-// ---------- LISTADO ----------
-function populateTandaFilter(){
-  const sel = document.getElementById('filter-tanda');
-  const current = sel.value;
-  const tandas = [...new Set(allRecords.map(r=>r.tanda).filter(Boolean))];
-  sel.innerHTML = '<option value="">Todas las tandas</option>' +
-    tandas.map(t=>`<option value="${t}">${t}</option>`).join('');
-  if(tandas.includes(current)) sel.value = current;
-}
-
-function renderTandasList(){
-  const el = document.getElementById('tandas-list');
-  const tandas = [...new Set(allRecords.map(r=>r.tanda).filter(Boolean))];
-  if(tandas.length===0){
-    el.innerHTML = 'Todavía no hay tandas cargadas.';
-    return;
-  }
-  el.innerHTML = tandas.map(t=>{
-    const count = allRecords.filter(r=>r.tanda===t).length;
-    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">📦 <strong style="color:var(--text)">${t}</strong> — ${count} códigos</div>`;
-  }).join('');
-}
-
-function renderListado(){
-  const filterVal = (document.getElementById('search-input').value || '').toLowerCase().trim();
-  const tandaVal = document.getElementById('filter-tanda').value;
-  const tbody = document.getElementById('listado-body');
-  const emptyEl = document.getElementById('listado-empty');
-  tbody.innerHTML = '';
-  let filtered = allRecords;
-  if(tandaVal){
-    filtered = filtered.filter(r=>r.tanda===tandaVal);
-  }
-  if(filterVal){
-    filtered = filtered.filter(r=>
-      String(r.index).includes(filterVal) ||
-      (r.lote||'').toLowerCase().includes(filterVal) ||
-      (r.estado||'').toLowerCase().includes(filterVal) ||
-      (r.operario||'').toLowerCase().includes(filterVal) ||
-      (r.tanda||'').toLowerCase().includes(filterVal)
-    );
-  }
-  populateTandaFilter();
-  renderTandasList();
-  if(filtered.length===0){
+  listEl.innerHTML = '';
+  if(clientes.length===0){
     emptyEl.classList.remove('hidden');
-    return;
+  } else {
+    emptyEl.classList.add('hidden');
+    clientes.forEach(c=>{
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.innerHTML = `<div><div class="main">${c.nombre}</div><div class="sub">Cliente</div></div><div class="arrow">›</div>`;
+      div.addEventListener('click', ()=>{
+        state.clienteId = c.id;
+        state.clienteNombre = c.nombre;
+        state.operacionId = state.operacionNombre = null;
+        state.loteId = state.loteNombre = null;
+        state.contenedorId = state.contenedorNombre = null;
+        goToView('operaciones');
+      });
+      listEl.appendChild(div);
+    });
   }
-  emptyEl.classList.add('hidden');
-  const frag = document.createDocumentFragment();
-  filtered.forEach(r=>{
-    const tr = document.createElement('tr');
-    const badgeClass = r.estado==='pegado' ? 'pegado' : (r.estado==='pendiente' ? 'pendiente' : 'duplicado');
-    const badgeLabel = r.estado==='pegado' ? 'Pegado OK' : (r.estado==='pendiente' ? 'Pendiente' : (r.estado==='duplicado_intento' ? 'Intento duplicado' : 'Pendiente'));
-    tr.innerHTML = `
-      <td><span class="index-pill">#${r.index}</span></td>
-      <td class="small">${r.tanda || '-'}</td>
-      <td>${r.lote || '<span class="small">sin asignar</span>'}</td>
-      <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
-      <td>${r.operario || '-'}</td>
-      <td>${formatDate(r.fecha_pegado)}</td>
-    `;
-    frag.appendChild(tr);
-  });
-  tbody.appendChild(frag);
 }
-document.getElementById('search-input').addEventListener('input', renderListado);
-document.getElementById('filter-tanda').addEventListener('change', renderListado);
 
-// ---------- INIT ----------
-async function initApp(){
-  await refreshDashboard();
+document.getElementById('crear-cliente-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('nuevo-cliente-input');
+  const nombre = input.value.trim();
+  if(!nombre){ showToast('Ingresá un nombre de cliente'); return; }
+  await crearNodo('cliente', nombre, null);
+  input.value = '';
+  showToast('Cliente creado: '+nombre);
+  loadClientes();
+});
+
+// ---------- OPERACIONES ----------
+async function loadOperaciones(){
+  const listEl = document.getElementById('operaciones-list');
+  const emptyEl = document.getElementById('operaciones-empty');
+  listEl.innerHTML = '<div class="small">Cargando...</div>';
+  const ops = await listarHijos('operacion', state.clienteId);
+  listEl.innerHTML = '';
+  if(ops.length===0){
+    emptyEl.classList.remove('hidden');
+  } else {
+    emptyEl.classList.add('hidden');
+    ops.forEach(o=>{
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.innerHTML = `<div><div class="main">${o.nombre}</div><div class="sub">Operación</div></div><div class="arrow">›</div>`;
+      div.addEventListener('click', ()=>{
+        state.operacionId = o.id;
+        state.operacionNombre = o.nombre;
+        state.loteId = state.loteNombre = null;
+        state.contenedorId = state.contenedorNombre = null;
+        goToView('lotes');
+      });
+      listEl.appendChild(div);
+    });
+  }
+}
+
+document.getElementById('crear-operacion-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('nueva-operacion-input');
+  const nombre = input.value.trim();
+  if(!nombre){ showToast('Ingresá una operación'); return; }
+  await crearNodo('operacion', nombre, state.clienteId);
+  input.value = '';
+  showToast('Operación creada: '+nombre);
+  loadOperaciones();
+});
+
+// ---------- LOTES ----------
+async function loadLotes(){
+  const listEl = document.getElementById('lotes-list');
+  const emptyEl = document.getElementById('lotes-empty');
+  listEl.innerHTML = '<div class="small">Cargando...</div>';
+  const lotes = await listarHijos('lote', state.operacionId);
+  listEl.innerHTML = '';
+  if(lotes.length===0){
+    emptyEl.classList.remove('hidden');
+  } else {
+    emptyEl.classList.add('hidden');
+    lotes.forEach(l=>{
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.innerHTML = `<div><div class="main">${l.nombre}</div><div class="sub">Lote</div></div><div class="arrow">›</div>`;
+      div.addEventListener('click', ()=>{
+        state.loteId = l.id;
+        state.loteNombre = l.nombre;
+        state.contenedorId = state.contenedorNombre = null;
+        goToView('contenedores');
+      });
+      listEl.appendChild(div);
+    });
+  }
+}
+
+document.getElementById('crear-lote-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('nuevo-lote-input');
+  const nombre = input.value.trim();
+  if(!nombre){ showToast('Ingresá un lote'); return; }
+  await crearNodo('lote', nombre, state.operacionId);
+  input.value = '';
+  showToast('Lote creado: '+nombre);
+  loadLotes();
+});
+
+// ---------- CONTENEDORES ----------
+async function loadContenedores(){
+  const listEl = document.getElementById('contenedores-list');
+  const emptyEl = document.getElementById('contenedores-empty');
+  listEl.innerHTML = '<div class="small">Cargando...</div>';
+  const contenedores = await listarHijos('contenedor', state.loteId);
+  listEl.innerHTML = '';
+  if(contenedores.length===0){
+    emptyEl.classList.remove('hidden');
+  } else {
+    emptyEl.classList.add('hidden');
+    contenedores.forEach(c=>{
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.innerHTML = `<div><div class="main">${c.nombre}</div><div class="sub">Contenedor</div></div><div class="arrow">›</div>`;
+      div.addEventListener('click', ()=>{
+        state.contenedorId = c.id;
+        state.contenedorNombre = c.nombre;
+        goToView('contenedor-detalle');
+      });
+      listEl.appendChild(div);
+    });
+  }
+}
+
+document.getElementById('crear-contenedor-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('nuevo-contenedor-input');
+  const nombre = input.value.trim();
+  if(!nombre){ showToast('Ingresá un contenedor'); return; }
+  await crearNodo('contenedor', nombre, state.loteId);
+  input.value = '';
+  showToast('Contenedor creado: '+nombre);
+  loadContenedores();
+});
+
+// ---------- DETALLE CONTENEDOR (placeholder, se completa en Parte 2) ----------
+function loadContenedorDetalle(){
+  const el = document.getElementById('contenedor-info');
+  el.innerHTML = `
+    <div><strong>Tipo:</strong> ${state.tipo}</div>
+    <div><strong>Cliente:</strong> ${state.clienteNombre}</div>
+    <div><strong>Operación:</strong> ${state.operacionNombre}</div>
+    <div><strong>Lote:</strong> ${state.loteNombre}</div>
+    <div><strong>Contenedor:</strong> ${state.contenedorNombre}</div>
+  `;
 }
 
 checkLogin();
