@@ -224,7 +224,6 @@
   <div id="view-contenedor-detalle" class="view hidden">
     <div class="subnav">
       <button data-subtab="resumen" class="active">Resumen</button>
-      <button data-subtab="asignar">Asignar lote*</button>
       <button data-subtab="escanear">Escanear</button>
       <button data-subtab="listado">Listado</button>
     </div>
@@ -265,30 +264,6 @@
       </div>
     </div>
 
-    <!-- SUB: ASIGNAR LOTE (nota: esto es lote interno del codigo individual si aplica, opcional) -->
-    <div id="sub-asignar" class="subtab hidden">
-      <div class="card">
-        <h2>Asignar referencia a un código puntual</h2>
-        <p class="small" style="margin-top:-6px;margin-bottom:12px">*Opcional: si dentro de este contenedor necesitás diferenciar sub-lotes o posiciones, asignalo por N° de código.</p>
-        <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
-          <input id="asig-index" type="number" min="1" placeholder="N° de código" />
-          <input id="asig-lote" type="text" placeholder="Referencia / sub-lote" />
-        </div>
-        <button class="btn" id="asig-btn">Guardar asignación</button>
-        <div id="asig-status" class="small" style="margin-top:8px"></div>
-      </div>
-      <div class="card">
-        <h2>Asignación rápida en rango</h2>
-        <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
-          <input id="rango-desde" type="number" min="1" placeholder="Desde N°" />
-          <input id="rango-hasta" type="number" min="1" placeholder="Hasta N°" />
-          <input id="rango-lote" type="text" placeholder="Referencia" />
-        </div>
-        <button class="btn secondary" id="rango-btn">Asignar rango</button>
-        <div id="rango-status" class="small" style="margin-top:8px"></div>
-      </div>
-    </div>
-
     <!-- SUB: ESCANEAR -->
     <div id="sub-escanear" class="subtab hidden">
       <div class="card">
@@ -315,7 +290,7 @@
         </div>
         <div style="max-height:480px;overflow-y:auto">
           <table>
-            <thead><tr><th>N°</th><th>Ref.</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
+            <thead><tr><th>N°</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
             <tbody id="listado-body"></tbody>
           </table>
           <div id="listado-empty" class="empty hidden">Sin códigos cargados todavía.</div>
@@ -944,64 +919,6 @@ document.getElementById('delete-container-btn').addEventListener('click', async 
   setTimeout(()=>{ goToView('contenedores'); }, 600);
 });
 
-// ---------- ASIGNAR REFERENCIA INDIVIDUAL ----------
-document.getElementById('asig-btn').addEventListener('click', async ()=>{
-  const idx = parseInt(document.getElementById('asig-index').value, 10);
-  const lote = document.getElementById('asig-lote').value.trim();
-  const statusEl = document.getElementById('asig-status');
-  if(!idx || idx<1){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Ingresá un número de código válido.';
-    return;
-  }
-  if(!lote){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Ingresá la referencia.';
-    return;
-  }
-  try{
-    await __fs.updateDoc(codigoDocRef(idx), { lote: lote });
-    statusEl.style.color = 'var(--ok)';
-    statusEl.textContent = `Código #${idx} asignado a "${lote}".`;
-    document.getElementById('asig-index').value = '';
-    document.getElementById('asig-lote').value = '';
-    await refreshContenedorStats();
-  }catch(e){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Error: ' + e.message;
-  }
-});
-
-document.getElementById('rango-btn').addEventListener('click', async ()=>{
-  const desde = parseInt(document.getElementById('rango-desde').value, 10);
-  const hasta = parseInt(document.getElementById('rango-hasta').value, 10);
-  const lote = document.getElementById('rango-lote').value.trim();
-  const statusEl = document.getElementById('rango-status');
-  if(!desde || !hasta || desde<1 || desde>hasta){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Rango inválido.';
-    return;
-  }
-  if(!lote){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Ingresá la referencia.';
-    return;
-  }
-  statusEl.style.color = 'var(--text)';
-  statusEl.textContent = 'Asignando...';
-  const batch = __fs.writeBatch(__db);
-  for(let i=desde;i<=hasta;i++){
-    batch.update(codigoDocRef(i), { lote: lote });
-  }
-  await batch.commit();
-  statusEl.style.color = 'var(--ok)';
-  statusEl.textContent = `Asignados ${hasta-desde+1} códigos al rango.`;
-  document.getElementById('rango-desde').value = '';
-  document.getElementById('rango-hasta').value = '';
-  document.getElementById('rango-lote').value = '';
-  await refreshContenedorStats();
-});
-
 // ---------- ESCANEAR ----------
 function findRecordByRawScan(rawText){
   for(const r of allRecords){
@@ -1103,7 +1020,6 @@ function renderListado(){
   if(filterVal){
     filtered = filtered.filter(r=>
       String(r.index).includes(filterVal) ||
-      (r.lote||'').toLowerCase().includes(filterVal) ||
       (r.estado||'').toLowerCase().includes(filterVal) ||
       (r.operario||'').toLowerCase().includes(filterVal)
     );
@@ -1120,7 +1036,6 @@ function renderListado(){
     const badgeLabel = r.estado==='pegado' ? 'Pegado OK' : (r.estado==='pendiente' ? 'Pendiente' : (r.estado==='duplicado_intento' ? 'Intento duplicado' : 'Pendiente'));
     tr.innerHTML = `
       <td><span class="index-pill">#${r.index}</span></td>
-      <td>${r.lote || '<span class="small">-</span>'}</td>
       <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
       <td>${r.operario || '-'}</td>
       <td>${formatDate(r.fecha_pegado)}</td>
