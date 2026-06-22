@@ -28,6 +28,15 @@
     collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
     query, where, writeBatch, onSnapshot, orderBy
   };
+
+  // PDF.js para renderizar paginas de PDF a imagen
+  const pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs";
+  window.__pdfjsLib = pdfjsLib;
+
+  // zxing-wasm para decodificar Data Matrix y QR desde imagen
+  const zxing = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@3/dist/es/reader/index.js");
+  window.__zxing = zxing;
 </script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
@@ -230,9 +239,22 @@
       </div>
       <div class="card">
         <h2>Cargar PDF de este contenedor</h2>
-        <p class="small" style="margin-top:-6px;margin-bottom:12px">Subí el PDF de códigos en el chat de Claude. Te devuelvo un bloque de texto — pegalo acá y cargá. Quedan vinculados a este contenedor exclusivamente.</p>
-        <textarea id="pdf-paste" rows="4" placeholder='Pegá aquí el bloque que te paso, ej: [["07798312320246","5>,r&apos;H","ownG"], ...]'></textarea>
-        <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar códigos a este contenedor</button>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Subí el PDF directo. La app decodifica los códigos automáticamente (Data Matrix o QR).</p>
+        <input type="file" id="pdf-file-input" accept="application/pdf" style="margin-bottom:10px" />
+        <div id="pdf-progress" class="hidden" style="margin-top:10px">
+          <div style="background:var(--panel2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:6px">
+            <div id="pdf-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:.2s"></div>
+          </div>
+          <div id="pdf-progress-text" class="small"></div>
+        </div>
+        <div id="pdf-decode-result" style="margin-top:10px"></div>
+        <details style="margin-top:14px">
+          <summary class="small" style="cursor:pointer;color:var(--accent)">Cargar manualmente (avanzado / respaldo)</summary>
+          <div style="margin-top:10px">
+            <textarea id="pdf-paste" rows="4" placeholder='Pegá aquí el bloque que te paso, ej: [["07798312320246","5>,r&apos;H","ownG"], ...]'></textarea>
+            <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar códigos pegados a este contenedor</button>
+          </div>
+        </details>
         <div id="seed-status" class="small" style="margin-top:8px"></div>
       </div>
       <div class="card danger-zone">
@@ -657,7 +679,221 @@ async function refreshContenedorStats(){
   document.getElementById('stat-duplicado').textContent = duplicado;
 }
 
-// ---------- CARGAR PDF AL CONTENEDOR ----------
+// ---------- FUNCION COMPARTIDA: cargar array de codigos al contenedor actual ----------
+async function cargarCodigosAlContenedor(parsedCodes, statusEl){
+  if(!Array.isArray(parsedCodes) || parsedCodes.length===0){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'No hay códigos para cargar.';
+    return false;
+  }
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Verificando duplicados...';
+
+  const allSnap = await __fs.getDocs(codigosCol());
+  const existingSerials = new Set();
+  allSnap.forEach(d=>existingSerials.add(d.data().serial));
+  const dupes = parsedCodes.filter(c => existingSerials.has(c[1]));
+  if(dupes.length > 0){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = `${dupes.length} código(s) ya existen en la base (mismo serial). No se cargó nada — revisá si este PDF ya fue cargado antes.`;
+    return false;
+  }
+
+  const startIdx = await getNextGlobalIndex();
+  statusEl.textContent = `Cargando ${parsedCodes.length} códigos...`;
+
+  const batch = __fs.writeBatch(__db);
+  parsedCodes.forEach((item, i)=>{
+    const [gtin, serial, security] = item;
+    const idx = startIdx + i;
+    batch.set(codigoDocRef(idx), {
+      index: idx,
+      gtin: gtin || "",
+      serial: serial,
+      security: security || "",
+      lote: "",
+      estado: "pendiente",
+      operario: "",
+      fecha_pegado: null,
+      contenedorId: state.contenedorId,
+      tipo: state.tipo,
+      cliente: state.clienteNombre,
+      operacion: state.operacionNombre,
+      loteNombre: state.loteNombre,
+      contenedorNombre: state.contenedorNombre,
+      fecha_carga: new Date().toISOString()
+    });
+  });
+  await batch.commit();
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos en este contenedor.`;
+  await refreshContenedorStats();
+  return true;
+}
+
+// ---------- DECODIFICACION AUTOMATICA DE PDF (pdf.js + zxing-wasm) ----------
+function findBlocks(sums, thresh=5){
+  const blocks = [];
+  let inBlock = false, start = 0;
+  for(let i=0;i<sums.length;i++){
+    if(sums[i] > thresh && !inBlock){ inBlock = true; start = i; }
+    else if(sums[i] <= thresh && inBlock){ inBlock = false; blocks.push([start,i]); }
+  }
+  if(inBlock) blocks.push([start, sums.length]);
+  return blocks;
+}
+
+function detectarGrilla(imageData){
+  const {width, height, data} = imageData;
+  const colsum = new Array(width).fill(0);
+  const rowsum = new Array(height).fill(0);
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      const idx = (y*width+x)*4;
+      const gray = (data[idx]+data[idx+1]+data[idx+2])/3;
+      const v = gray < 128 ? 1 : 0;
+      colsum[x] += v;
+      rowsum[y] += v;
+    }
+  }
+  return { cb: findBlocks(colsum), rb: findBlocks(rowsum) };
+}
+
+async function renderPdfPageToImageData(pdfjsDoc, pageNum, scale){
+  const page = await pdfjsDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return { imageData: ctx.getImageData(0,0,canvas.width,canvas.height), canvas, ctx };
+}
+
+function cropImageData(ctx, x0, y0, x1, y1, upscale){
+  const w = x1-x0, h = y1-y0;
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = w*upscale;
+  cropCanvas.height = h*upscale;
+  const cctx = cropCanvas.getContext('2d');
+  cctx.imageSmoothingEnabled = true;
+  cctx.imageSmoothingQuality = 'high';
+  cctx.drawImage(ctx.canvas, x0, y0, w, h, 0, 0, w*upscale, h*upscale);
+  return cctx.getImageData(0,0,cropCanvas.width,cropCanvas.height);
+}
+
+async function decodificarPdfCompleto(file, onProgress){
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjsLib = window.__pdfjsLib;
+  const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const numPages = pdfDoc.numPages;
+
+  // primero contamos el total de celdas para la barra de progreso
+  const pageGrids = [];
+  let totalCells = 0;
+  for(let p=1; p<=numPages; p++){
+    const { imageData, ctx } = await renderPdfPageToImageData(pdfDoc, p, 2.0);
+    const grid = detectarGrilla(imageData);
+    pageGrids.push({ ctx, grid });
+    totalCells += grid.cb.length * grid.rb.length;
+  }
+
+  const results = [];
+  const failed = [];
+  let processed = 0;
+  const margin = 8;
+
+  for(const { ctx, grid } of pageGrids){
+    for(const [r0,r1] of grid.rb){
+      for(const [c0,c1] of grid.cb){
+        const x0 = Math.max(0, c0-margin), y0 = Math.max(0, r0-margin);
+        const x1 = c1+margin, y1 = r1+margin;
+        const cellImg = cropImageData(ctx, x0, y0, x1, y1, 3);
+        let decoded = null;
+        try{
+          const barcodeResults = await __zxing.readBarcodes(cellImg, {
+            formats: ["DataMatrix","QRCode"],
+            tryHarder: true
+          });
+          if(barcodeResults.length > 0 && barcodeResults[0].isValid){
+            decoded = barcodeResults[0];
+          }
+        }catch(e){ /* fallo de decodificacion en esta celda */ }
+
+        processed++;
+        if(onProgress) onProgress(processed, totalCells);
+
+        if(decoded){
+          results.push(parseDecodedText(decoded));
+        } else {
+          failed.push(processed);
+        }
+      }
+    }
+  }
+  return { results, failed, total: totalCells };
+}
+
+function parseDecodedText(decoded){
+  // zxing-wasm con contentType GS1 da decoded.text como "(01)GTIN(21)SERIAL(93)SECURITY"
+  const text = decoded.text || '';
+  const gtinMatch = text.match(/\(01\)(\d+)/);
+  const serialMatch = text.match(/\(21\)([^\(]+)/);
+  const securityMatch = text.match(/\(93\)([^\(]+)/);
+  if(gtinMatch && serialMatch){
+    return [gtinMatch[1], serialMatch[1], securityMatch ? securityMatch[1] : ''];
+  }
+  // si no es formato GS1 reconocido (ej. QR comun), usamos el texto completo como "serial"
+  return ['', text, ''];
+}
+
+document.getElementById('pdf-file-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const progressWrap = document.getElementById('pdf-progress');
+  const progressBar = document.getElementById('pdf-progress-bar');
+  const progressText = document.getElementById('pdf-progress-text');
+  const resultEl = document.getElementById('pdf-decode-result');
+  resultEl.innerHTML = '';
+  progressWrap.classList.remove('hidden');
+  progressBar.style.width = '0%';
+  progressText.textContent = 'Leyendo PDF...';
+
+  try{
+    const { results, failed, total } = await decodificarPdfCompleto(file, (done, total)=>{
+      const pct = Math.round((done/total)*100);
+      progressBar.style.width = pct+'%';
+      progressText.textContent = `Decodificando código ${done} de ${total}...`;
+    });
+
+    progressWrap.classList.add('hidden');
+
+    if(failed.length > 0){
+      resultEl.innerHTML = `<div class="result-box err" style="text-align:left">⚠ Se decodificaron ${results.length} de ${total} códigos.<div class="small">${failed.length} código(s) no se pudieron leer (posiciones: ${failed.join(', ')}). Podés cargar los que sí se leyeron, y para los faltantes recurrir a la carga manual o repetir con mejor calidad de escaneo.</div></div>`;
+    } else {
+      resultEl.innerHTML = `<div class="result-box ok">✓ Se decodificaron los ${results.length} códigos correctamente.</div>`;
+    }
+
+    if(results.length > 0){
+      const confirmBtn = document.createElement('button');
+      confirmBtn.className = 'btn';
+      confirmBtn.style.marginTop = '10px';
+      confirmBtn.textContent = `Cargar estos ${results.length} códigos a este contenedor`;
+      confirmBtn.addEventListener('click', async ()=>{
+        confirmBtn.disabled = true;
+        const statusEl = document.getElementById('seed-status');
+        await cargarCodigosAlContenedor(results, statusEl);
+        confirmBtn.textContent = 'Cargado ✓';
+      });
+      resultEl.appendChild(confirmBtn);
+    }
+  }catch(err){
+    progressWrap.classList.add('hidden');
+    resultEl.innerHTML = `<div class="result-box err">Error al procesar el PDF: ${err.message}</div>`;
+  }
+});
+
+// ---------- CARGAR PDF AL CONTENEDOR (manual / respaldo) ----------
 document.getElementById('seed-btn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('seed-status');
   const btn = document.getElementById('seed-btn');
@@ -679,52 +915,9 @@ document.getElementById('seed-btn').addEventListener('click', async ()=>{
   }
 
   btn.disabled = true;
-  statusEl.style.color = 'var(--text)';
-  statusEl.textContent = 'Verificando duplicados...';
-
-  // chequeo de duplicados contra TODA la base (serial es único globalmente)
-  const allSnap = await __fs.getDocs(codigosCol());
-  const existingSerials = new Set();
-  allSnap.forEach(d=>existingSerials.add(d.data().serial));
-  const dupes = parsedCodes.filter(c => existingSerials.has(c[1]));
-  if(dupes.length > 0){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = `${dupes.length} código(s) ya existen en la base (mismo serial). No se cargó nada — revisá si esta tanda ya fue cargada antes.`;
-    btn.disabled = false;
-    return;
-  }
-
-  const startIdx = await getNextGlobalIndex();
-  statusEl.textContent = `Cargando ${parsedCodes.length} códigos...`;
-
-  const batch = __fs.writeBatch(__db);
-  parsedCodes.forEach((item, i)=>{
-    const [gtin, serial, security] = item;
-    const idx = startIdx + i;
-    batch.set(codigoDocRef(idx), {
-      index: idx,
-      gtin: gtin,
-      serial: serial,
-      security: security,
-      lote: "",
-      estado: "pendiente",
-      operario: "",
-      fecha_pegado: null,
-      contenedorId: state.contenedorId,
-      tipo: state.tipo,
-      cliente: state.clienteNombre,
-      operacion: state.operacionNombre,
-      loteNombre: state.loteNombre,
-      contenedorNombre: state.contenedorNombre,
-      fecha_carga: new Date().toISOString()
-    });
-  });
-  await batch.commit();
-  statusEl.style.color = 'var(--ok)';
-  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos en este contenedor.`;
-  document.getElementById('pdf-paste').value = '';
+  const success = await cargarCodigosAlContenedor(parsedCodes, statusEl);
+  if(success) document.getElementById('pdf-paste').value = '';
   btn.disabled = false;
-  await refreshContenedorStats();
 });
 
 // ---------- ELIMINAR CONTENEDOR ----------
