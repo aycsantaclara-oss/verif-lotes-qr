@@ -37,8 +37,16 @@
   // zxing-wasm para decodificar Data Matrix y QR desde imagen
   const zxing = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@3/dist/es/reader/index.js");
   window.__zxing = zxing;
+
+  // zxing-wasm writer para generar Data Matrix nuevos (para las etiquetas)
+  const zxingWriter = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@3/dist/es/writer/index.js");
+  window.__zxingWriter = zxingWriter;
 </script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip-utils.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.37.0/build/docxtemplater.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docxtemplater-image-module-free@1.1.1/build/imagemodule.js"></script>
 <style>
   :root{
     --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --border:#2a3240;
@@ -230,6 +238,7 @@
       <button data-subtab="resumen" class="active">Resumen</button>
       <button data-subtab="escanear">Escanear</button>
       <button data-subtab="listado">Listado</button>
+      <button data-subtab="etiquetas">Etiquetas</button>
     </div>
 
     <!-- SUB: RESUMEN -->
@@ -299,6 +308,31 @@
           </table>
           <div id="listado-empty" class="empty hidden">Sin códigos cargados todavía.</div>
         </div>
+      </div>
+    </div>
+    <!-- SUB: ETIQUETAS -->
+    <div id="sub-etiquetas" class="subtab hidden">
+      <div class="card">
+        <h2>Generar etiqueta para imprimir</h2>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Elegí el código que vas a pegar ahora, subí la plantilla Word de este cliente, y descargá la etiqueta completa con la fecha, el lote y el código ya insertados.</p>
+
+        <div class="field">
+          <label>Fecha de producción (del lote)</label>
+          <input id="etiqueta-fecha-display" type="text" disabled style="opacity:.7" />
+        </div>
+
+        <div class="field">
+          <label>Código a imprimir</label>
+          <select id="etiqueta-codigo-select"></select>
+        </div>
+
+        <div class="field">
+          <label>Plantilla Word de la etiqueta (.docx)</label>
+          <input type="file" id="etiqueta-docx-input" accept=".docx" />
+        </div>
+
+        <button class="btn" id="generar-etiqueta-btn">Generar y descargar etiqueta</button>
+        <div id="etiqueta-status" class="small" style="margin-top:8px"></div>
       </div>
     </div>
   </div>
@@ -631,6 +665,7 @@ document.querySelectorAll('.subnav button').forEach(btn=>{
     document.getElementById('sub-'+btn.dataset.subtab).classList.remove('hidden');
     if(btn.dataset.subtab !== 'escanear' && scanning) stopScan();
     if(btn.dataset.subtab === 'listado') renderListado();
+    if(btn.dataset.subtab === 'etiquetas') prepararEtiquetas();
   });
 });
 
@@ -1063,6 +1098,135 @@ function renderListado(){
   tbody.appendChild(frag);
 }
 document.getElementById('search-input').addEventListener('input', renderListado);
+
+// ---------- GENERAR ETIQUETAS ----------
+async function prepararEtiquetas(){
+  const fechaDisplay = document.getElementById('etiqueta-fecha-display');
+  fechaDisplay.value = state.loteFechaProduccion ? formatFechaDisplay(state.loteFechaProduccion) : 'Sin fecha asignada al lote';
+
+  if(allRecords.length === 0){
+    await loadCodigosDeContenedor();
+  }
+  const select = document.getElementById('etiqueta-codigo-select');
+  select.innerHTML = allRecords.map(r=>
+    `<option value="${r.index}">#${r.index} ${r.estado==='pegado' ? '(ya impreso/pegado)' : ''}</option>`
+  ).join('');
+}
+
+async function generarImagenDataMatrix(record){
+  const gtin = record.gtin || '';
+  const serial = record.serial;
+  const security = record.security || '';
+  const GS = String.fromCharCode(0x1d);
+  let raw;
+  if(gtin){
+    raw = `01${gtin}21${serial}${GS}93${security}`;
+  } else {
+    // codigo no-GS1 (ej QR comun), usamos el texto crudo guardado en serial
+    raw = serial;
+  }
+  const result = await __zxingWriter.writeBarcode(raw, {
+    format: "DataMatrix",
+    scale: 5
+  });
+  if(result.error){
+    throw new Error('No se pudo generar el código: ' + result.error);
+  }
+  const arrayBuffer = await result.image.arrayBuffer();
+  return new Uint8Array(arrayBuffer);
+}
+
+document.getElementById('generar-etiqueta-btn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('etiqueta-status');
+  const btn = document.getElementById('generar-etiqueta-btn');
+  const select = document.getElementById('etiqueta-codigo-select');
+  const fileInput = document.getElementById('etiqueta-docx-input');
+
+  const idx = parseInt(select.value, 10);
+  const file = fileInput.files[0];
+
+  if(!idx){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'No hay código seleccionado.';
+    return;
+  }
+  if(!file){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Subí la plantilla Word (.docx) de este cliente.';
+    return;
+  }
+  if(!state.loteFechaProduccion){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Este lote no tiene fecha de producción asignada. Volvé al lote y completala.';
+    return;
+  }
+
+  const record = allRecords.find(r=>r.index===idx);
+  if(!record){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'No se encontró el código seleccionado.';
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = 'Generando código de barras...';
+
+  try{
+    const qrImageBytes = await generarImagenDataMatrix(record);
+
+    statusEl.textContent = 'Completando plantilla...';
+    const docxArrayBuffer = await file.arrayBuffer();
+    const zip = new window.PizZip(docxArrayBuffer);
+
+    const imageOpts = {
+      centered: false,
+      getImage: function(tagValue, tagName){
+        // tagValue sera la clave 'qrImage', devolvemos los bytes ya generados
+        return qrImageBytes;
+      },
+      getSize: function(img, tagValue, tagName){
+        return [100, 100];
+      }
+    };
+    const imageModule = new window.ImageModule(imageOpts);
+
+    const doc = new window.docxtemplater(zip, {
+      modules: [imageModule],
+      paragraphLoop: true,
+      linebreaks: true
+    });
+
+    doc.render({
+      fecha: formatFechaDisplay(state.loteFechaProduccion),
+      lote: state.loteNombre,
+      qrImage: 'qrImage'
+    });
+
+    const outBlob = doc.getZip().generate({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+
+    const url = URL.createObjectURL(outBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Etiqueta_${state.loteNombre}_${idx}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = `Etiqueta generada y descargada (código #${idx}).`;
+
+    await prepararEtiquetas();
+  }catch(err){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Error al generar la etiqueta: ' + err.message;
+  }
+  btn.disabled = false;
+});
 
 checkLogin();
 </script>
