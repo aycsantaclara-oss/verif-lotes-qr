@@ -199,6 +199,10 @@
         <label>N° de lote</label>
         <input id="nuevo-lote-input" type="text" placeholder="Ej: L-001" />
       </div>
+      <div class="field">
+        <label>Fecha de producción</label>
+        <input id="nuevo-lote-fecha" type="date" />
+      </div>
       <button class="btn secondary" id="crear-lote-btn">Crear lote</button>
     </div>
   </div>
@@ -311,9 +315,16 @@ let state = {
   tipo: null,       // "Cajas" | "Bins"
   clienteId: null, clienteNombre: null,
   operacionId: null, operacionNombre: null,
-  loteId: null, loteNombre: null,
+  loteId: null, loteNombre: null, loteFechaProduccion: null,
   contenedorId: null, contenedorNombre: null
 };
+
+function formatFechaDisplay(isoDate){
+  // isoDate viene como YYYY-MM-DD (de <input type=date>), mostramos DD/MM/YYYY
+  if(!isoDate) return '';
+  const [y,m,d] = isoDate.split('-');
+  return `${d}/${m}/${y}`;
+}
 
 function showToast(msg, ms=2500){
   const t = document.getElementById('toast');
@@ -398,7 +409,7 @@ document.querySelectorAll('.type-btn').forEach(btn=>{
     state.tipo = btn.dataset.tipo;
     state.clienteId = state.clienteNombre = null;
     state.operacionId = state.operacionNombre = null;
-    state.loteId = state.loteNombre = null;
+    state.loteId = state.loteNombre = state.loteFechaProduccion = null;
     state.contenedorId = state.contenedorNombre = null;
     goToView('clientes');
   });
@@ -411,13 +422,14 @@ function jerarquiaCol(){
   return __fs.collection(__db, 'jerarquia');
 }
 
-async function crearNodo(nivel, nombre, parentId){
+async function crearNodo(nivel, nombre, parentId, extra){
   const data = {
     nivel: nivel, // 'cliente' | 'operacion' | 'lote' | 'contenedor'
     nombre: nombre,
     parentId: parentId || null,
     tipoRaiz: state.tipo,
-    fecha_creacion: new Date().toISOString()
+    fecha_creacion: new Date().toISOString(),
+    ...(extra || {})
   };
   const ref = __fs.doc(jerarquiaCol());
   await __fs.setDoc(ref, data);
@@ -464,7 +476,7 @@ async function loadClientes(){
         state.clienteId = c.id;
         state.clienteNombre = c.nombre;
         state.operacionId = state.operacionNombre = null;
-        state.loteId = state.loteNombre = null;
+        state.loteId = state.loteNombre = state.loteFechaProduccion = null;
         state.contenedorId = state.contenedorNombre = null;
         goToView('operaciones');
       });
@@ -501,7 +513,7 @@ async function loadOperaciones(){
       div.addEventListener('click', ()=>{
         state.operacionId = o.id;
         state.operacionNombre = o.nombre;
-        state.loteId = state.loteNombre = null;
+        state.loteId = state.loteNombre = state.loteFechaProduccion = null;
         state.contenedorId = state.contenedorNombre = null;
         goToView('lotes');
       });
@@ -534,10 +546,12 @@ async function loadLotes(){
     lotes.forEach(l=>{
       const div = document.createElement('div');
       div.className = 'list-item';
-      div.innerHTML = `<div><div class="main">${l.nombre}</div><div class="sub">Lote</div></div><div class="arrow">›</div>`;
+      const fechaDisplay = l.fechaProduccion ? formatFechaDisplay(l.fechaProduccion) : 'sin fecha';
+      div.innerHTML = `<div><div class="main">${l.nombre}</div><div class="sub">Lote · Producción: ${fechaDisplay}</div></div><div class="arrow">›</div>`;
       div.addEventListener('click', ()=>{
         state.loteId = l.id;
         state.loteNombre = l.nombre;
+        state.loteFechaProduccion = l.fechaProduccion || '';
         state.contenedorId = state.contenedorNombre = null;
         goToView('contenedores');
       });
@@ -548,10 +562,14 @@ async function loadLotes(){
 
 document.getElementById('crear-lote-btn').addEventListener('click', async ()=>{
   const input = document.getElementById('nuevo-lote-input');
+  const fechaInput = document.getElementById('nuevo-lote-fecha');
   const nombre = input.value.trim();
+  const fechaProduccion = fechaInput.value; // formato YYYY-MM-DD del input date
   if(!nombre){ showToast('Ingresá un lote'); return; }
-  await crearNodo('lote', nombre, state.operacionId);
+  if(!fechaProduccion){ showToast('Ingresá la fecha de producción'); return; }
+  await crearNodo('lote', nombre, state.operacionId, { fechaProduccion });
   input.value = '';
+  fechaInput.value = '';
   showToast('Lote creado: '+nombre);
   loadLotes();
 });
