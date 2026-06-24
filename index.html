@@ -114,6 +114,35 @@
   .list-item-actions{display:flex;align-items:center;gap:10px;}
   .delete-icon-btn{background:transparent;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:6px 8px;border-radius:8px;line-height:1;}
   .delete-icon-btn:hover{background:rgba(239,68,68,.15);color:var(--err);}
+
+  /* ---- Vista de impresión ---- */
+  .print-only{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #print-view, #print-view *{visibility:visible;}
+    #print-view{
+      display:block !important;
+      position:absolute;
+      top:0; left:0;
+      width:100%;
+      background:#fff;
+      color:#000;
+      padding:0;
+      font-family:Arial, sans-serif;
+    }
+    .print-header{margin-bottom:16px;border-bottom:2px solid #000;padding-bottom:10px;}
+    .print-header h1{font-size:18px;margin:0 0 6px;}
+    .print-breadcrumb{font-size:13px;font-weight:bold;margin-bottom:4px;}
+    .print-meta{font-size:11px;color:#444;}
+    .print-stats{display:flex;gap:16px;margin-bottom:16px;}
+    .print-stats .pstat{border:1px solid #999;border-radius:6px;padding:8px 14px;text-align:center;}
+    .print-stats .pstat .pn{font-size:18px;font-weight:bold;display:block;}
+    .print-stats .pstat .pl{font-size:10px;color:#444;text-transform:uppercase;}
+    .print-table{width:100%;border-collapse:collapse;font-size:11px;}
+    .print-table th, .print-table td{border:1px solid #999;padding:4px 8px;text-align:left;}
+    .print-table th{background:#eee;}
+    @page{margin:15mm;}
+  }
 </style>
 </head>
 <body>
@@ -287,7 +316,10 @@
     <!-- SUB: LISTADO -->
     <div id="sub-listado" class="subtab hidden">
       <div class="card">
-        <h2>Códigos de este lote</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Códigos de este lote</h2>
+          <button class="btn secondary" id="imprimir-resumen-btn" style="width:auto;padding:8px 14px;font-size:12px">🖨 Imprimir resumen</button>
+        </div>
         <div class="search-bar" style="margin-bottom:10px">
           <input id="search-input" type="text" placeholder="Buscar por N°, referencia o estado..." />
         </div>
@@ -302,6 +334,20 @@
     </div>
   </div>
 
+</div>
+
+<!-- VISTA DE IMPRESION (oculta en pantalla, visible solo al imprimir) -->
+<div id="print-view" class="print-only">
+  <div class="print-header">
+    <h1>Resumen de Trazabilidad</h1>
+    <div class="print-breadcrumb" id="print-breadcrumb"></div>
+    <div class="print-meta" id="print-meta"></div>
+  </div>
+  <div class="print-stats" id="print-stats"></div>
+  <table class="print-table">
+    <thead><tr><th>N°</th><th>Estado</th><th>Operario</th><th>Fecha</th></tr></thead>
+    <tbody id="print-table-body"></tbody>
+  </table>
 </div>
 
 <div id="toast" class="toast hidden"></div>
@@ -1126,6 +1172,54 @@ function renderListado(){
   tbody.appendChild(frag);
 }
 document.getElementById('search-input').addEventListener('input', renderListado);
+
+// ---------- IMPRIMIR RESUMEN ----------
+function badgeLabelFor(estado){
+  if(estado==='pegado') return 'Pegado OK';
+  if(estado==='pendiente') return 'Pendiente';
+  if(estado==='duplicado_intento') return 'Intento duplicado';
+  return 'Pendiente';
+}
+
+document.getElementById('imprimir-resumen-btn').addEventListener('click', async ()=>{
+  if(allRecords.length === 0){
+    await loadCodigosDelLote();
+  }
+
+  // encabezado con la jerarquia completa
+  const breadcrumbHtml = [state.tipo, state.clienteNombre, state.operacionNombre, state.cargaNombre, state.loteNombre]
+    .filter(Boolean).join(' &rsaquo; ');
+  document.getElementById('print-breadcrumb').innerHTML = breadcrumbHtml;
+
+  const now = new Date();
+  document.getElementById('print-meta').textContent =
+    `Generado el ${now.toLocaleDateString('es-AR')} a las ${now.toLocaleTimeString('es-AR')}`;
+
+  // totales
+  const total = allRecords.length;
+  const pegado = allRecords.filter(r=>r.estado==='pegado').length;
+  const pendiente = allRecords.filter(r=>r.estado==='pendiente').length;
+  const duplicado = allRecords.filter(r=>r.estado==='duplicado_intento').length;
+  document.getElementById('print-stats').innerHTML = `
+    <div class="pstat"><span class="pn">${total}</span><span class="pl">Total</span></div>
+    <div class="pstat"><span class="pn">${pegado}</span><span class="pl">Pegados OK</span></div>
+    <div class="pstat"><span class="pn">${pendiente}</span><span class="pl">Pendientes</span></div>
+    <div class="pstat"><span class="pn">${duplicado}</span><span class="pl">Duplicados</span></div>
+  `;
+
+  // tabla completa (todos los registros, no solo los filtrados en pantalla)
+  const tbody = document.getElementById('print-table-body');
+  tbody.innerHTML = allRecords.map(r => `
+    <tr>
+      <td>#${r.index}</td>
+      <td>${badgeLabelFor(r.estado)}</td>
+      <td>${r.operario || '-'}</td>
+      <td>${formatDate(r.fecha_pegado)}</td>
+    </tr>
+  `).join('');
+
+  window.print();
+});
 
 checkLogin();
 </script>
