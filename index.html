@@ -37,16 +37,8 @@
   // zxing-wasm para decodificar Data Matrix y QR desde imagen
   const zxing = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@3/dist/es/reader/index.js");
   window.__zxing = zxing;
-
-  // zxing-wasm writer para generar Data Matrix nuevos (para las etiquetas)
-  const zxingWriter = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@3/dist/es/writer/index.js");
-  window.__zxingWriter = zxingWriter;
 </script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip-utils.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.37.0/build/docxtemplater.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docxtemplater-image-module-free@1.1.1/build/imagemodule.js"></script>
 <style>
   :root{
     --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --border:#2a3240;
@@ -119,6 +111,9 @@
   .result-box.dup{background:rgba(234,179,8,.12);border:1px solid var(--warn);color:var(--warn);}
   .index-pill{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--muted);font-family:monospace;}
   .danger-zone{border:1px solid var(--err);}
+  .list-item-actions{display:flex;align-items:center;gap:10px;}
+  .delete-icon-btn{background:transparent;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:6px 8px;border-radius:8px;line-height:1;}
+  .delete-icon-btn:hover{background:rgba(239,68,68,.15);color:var(--err);}
 </style>
 </head>
 <body>
@@ -194,12 +189,29 @@
     </div>
   </div>
 
-  <!-- NIVEL 3: listado de Lotes dentro de la operación -->
+  <!-- NIVEL 3: listado de Cargas dentro de la operación -->
+  <div id="view-cargas" class="view hidden">
+    <div class="card">
+      <h2>Cargas</h2>
+      <div id="cargas-list"></div>
+      <div id="cargas-empty" class="empty hidden">Todavía no hay cargas para esta operación.</div>
+    </div>
+    <div class="card">
+      <h2>Nueva carga</h2>
+      <div class="field">
+        <label>N° / nombre de carga</label>
+        <input id="nueva-carga-input" type="text" placeholder="Ej: Carga-01" />
+      </div>
+      <button class="btn secondary" id="crear-carga-btn">Crear carga</button>
+    </div>
+  </div>
+
+  <!-- NIVEL 4: listado de Lotes dentro de la carga -->
   <div id="view-lotes" class="view hidden">
     <div class="card">
       <h2>Lotes</h2>
       <div id="lotes-list"></div>
-      <div id="lotes-empty" class="empty hidden">Todavía no hay lotes para esta operación.</div>
+      <div id="lotes-empty" class="empty hidden">Todavía no hay lotes para esta carga.</div>
     </div>
     <div class="card">
       <h2>Nuevo lote</h2>
@@ -207,38 +219,16 @@
         <label>N° de lote</label>
         <input id="nuevo-lote-input" type="text" placeholder="Ej: L-001" />
       </div>
-      <div class="field">
-        <label>Fecha de producción</label>
-        <input id="nuevo-lote-fecha" type="date" />
-      </div>
       <button class="btn secondary" id="crear-lote-btn">Crear lote</button>
     </div>
   </div>
 
-  <!-- NIVEL 4: listado de Contenedores dentro del lote -->
-  <div id="view-contenedores" class="view hidden">
-    <div class="card">
-      <h2>Contenedores</h2>
-      <div id="contenedores-list"></div>
-      <div id="contenedores-empty" class="empty hidden">Todavía no hay contenedores para este lote.</div>
-    </div>
-    <div class="card">
-      <h2>Nuevo contenedor</h2>
-      <div class="field">
-        <label>N° de contenedor</label>
-        <input id="nuevo-contenedor-input" type="text" placeholder="Ej: CONT-01" />
-      </div>
-      <button class="btn secondary" id="crear-contenedor-btn">Crear contenedor</button>
-    </div>
-  </div>
-
-  <!-- NIVEL 5: dentro del contenedor -->
-  <div id="view-contenedor-detalle" class="view hidden">
+  <!-- NIVEL 5: dentro del lote -->
+  <div id="view-lote-detalle" class="view hidden">
     <div class="subnav">
       <button data-subtab="resumen" class="active">Resumen</button>
       <button data-subtab="escanear">Escanear</button>
       <button data-subtab="listado">Listado</button>
-      <button data-subtab="etiquetas">Etiquetas</button>
     </div>
 
     <!-- SUB: RESUMEN -->
@@ -250,7 +240,7 @@
         <div class="stat err"><div class="n" id="stat-duplicado">—</div><div class="l">Duplicados</div></div>
       </div>
       <div class="card">
-        <h2>Cargar PDF de este contenedor</h2>
+        <h2>Cargar PDF de este lote</h2>
         <p class="small" style="margin-top:-6px;margin-bottom:12px">Subí el PDF directo. La app decodifica los códigos automáticamente (Data Matrix o QR).</p>
         <input type="file" id="pdf-file-input" accept="application/pdf" style="margin-bottom:10px" />
         <div id="pdf-progress" class="hidden" style="margin-top:10px">
@@ -264,15 +254,15 @@
           <summary class="small" style="cursor:pointer;color:var(--accent)">Cargar manualmente (avanzado / respaldo)</summary>
           <div style="margin-top:10px">
             <textarea id="pdf-paste" rows="4" placeholder='Pegá aquí el bloque que te paso, ej: [["07798312320246","5>,r&apos;H","ownG"], ...]'></textarea>
-            <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar códigos pegados a este contenedor</button>
+            <button class="btn secondary" id="seed-btn" style="margin-top:10px">Cargar códigos pegados a este lote</button>
           </div>
         </details>
         <div id="seed-status" class="small" style="margin-top:8px"></div>
       </div>
       <div class="card danger-zone">
-        <h2 style="color:var(--err)">Eliminar este contenedor</h2>
-        <p class="small" style="margin-top:-6px;margin-bottom:12px">Borra el contenedor y TODOS los códigos cargados en él. No se puede deshacer.</p>
-        <button class="btn danger" id="delete-container-btn">Eliminar contenedor y sus códigos</button>
+        <h2 style="color:var(--err)">Eliminar este lote</h2>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Borra el lote y TODOS los códigos cargados en él. No se puede deshacer.</p>
+        <button class="btn danger" id="delete-container-btn">Eliminar lote y sus códigos</button>
         <div id="delete-status" class="small" style="margin-top:8px"></div>
       </div>
     </div>
@@ -281,7 +271,7 @@
     <div id="sub-escanear" class="subtab hidden">
       <div class="card">
         <h2>Verificar código pegado</h2>
-        <p class="small" style="margin-top:-6px;margin-bottom:12px">Escaneá el Data Matrix pegado en el lote/contenedor.</p>
+        <p class="small" style="margin-top:-6px;margin-bottom:12px">Escaneá el Data Matrix pegado en este lote.</p>
         <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
           <input id="operario-input" type="text" placeholder="Tu nombre (operario)" />
         </div>
@@ -297,7 +287,7 @@
     <!-- SUB: LISTADO -->
     <div id="sub-listado" class="subtab hidden">
       <div class="card">
-        <h2>Códigos de este contenedor</h2>
+        <h2>Códigos de este lote</h2>
         <div class="search-bar" style="margin-bottom:10px">
           <input id="search-input" type="text" placeholder="Buscar por N°, referencia o estado..." />
         </div>
@@ -308,31 +298,6 @@
           </table>
           <div id="listado-empty" class="empty hidden">Sin códigos cargados todavía.</div>
         </div>
-      </div>
-    </div>
-    <!-- SUB: ETIQUETAS -->
-    <div id="sub-etiquetas" class="subtab hidden">
-      <div class="card">
-        <h2>Generar etiqueta para imprimir</h2>
-        <p class="small" style="margin-top:-6px;margin-bottom:12px">Elegí el código que vas a pegar ahora, subí la plantilla Word de este cliente, y descargá la etiqueta completa con la fecha, el lote y el código ya insertados.</p>
-
-        <div class="field">
-          <label>Fecha de producción (del lote)</label>
-          <input id="etiqueta-fecha-display" type="text" disabled style="opacity:.7" />
-        </div>
-
-        <div class="field">
-          <label>Código a imprimir</label>
-          <select id="etiqueta-codigo-select"></select>
-        </div>
-
-        <div class="field">
-          <label>Plantilla Word de la etiqueta (.docx)</label>
-          <input type="file" id="etiqueta-docx-input" accept=".docx" />
-        </div>
-
-        <button class="btn" id="generar-etiqueta-btn">Generar y descargar etiqueta</button>
-        <div id="etiqueta-status" class="small" style="margin-top:8px"></div>
       </div>
     </div>
   </div>
@@ -349,16 +314,9 @@ let state = {
   tipo: null,       // "Cajas" | "Bins"
   clienteId: null, clienteNombre: null,
   operacionId: null, operacionNombre: null,
-  loteId: null, loteNombre: null, loteFechaProduccion: null,
-  contenedorId: null, contenedorNombre: null
+  cargaId: null, cargaNombre: null,
+  loteId: null, loteNombre: null
 };
-
-function formatFechaDisplay(isoDate){
-  // isoDate viene como YYYY-MM-DD (de <input type=date>), mostramos DD/MM/YYYY
-  if(!isoDate) return '';
-  const [y,m,d] = isoDate.split('-');
-  return `${d}/${m}/${y}`;
-}
 
 function showToast(msg, ms=2500){
   const t = document.getElementById('toast');
@@ -397,7 +355,7 @@ document.getElementById('logout-btn').addEventListener('click', ()=>{
 });
 
 // ---------- NAVEGACIÓN ----------
-const VIEWS = ['tipo','clientes','operaciones','lotes','contenedores','contenedor-detalle'];
+const VIEWS = ['tipo','clientes','operaciones','cargas','lotes','lote-detalle'];
 
 function goToView(name){
   VIEWS.forEach(v=>{
@@ -407,9 +365,9 @@ function goToView(name){
   renderBreadcrumb(name);
   if(name==='clientes') loadClientes();
   if(name==='operaciones') loadOperaciones();
+  if(name==='cargas') loadCargas();
   if(name==='lotes') loadLotes();
-  if(name==='contenedores') loadContenedores();
-  if(name==='contenedor-detalle') loadContenedorDetalle();
+  if(name==='lote-detalle') loadLoteDetalle();
 }
 
 function renderBreadcrumb(current){
@@ -418,9 +376,9 @@ function renderBreadcrumb(current){
   parts.push({label:'Inicio', view:'tipo'});
   if(state.tipo) parts.push({label:state.tipo, view:'clientes'});
   if(state.clienteNombre) parts.push({label:state.clienteNombre, view:'operaciones'});
-  if(state.operacionNombre) parts.push({label:state.operacionNombre, view:'lotes'});
-  if(state.loteNombre) parts.push({label:state.loteNombre, view:'contenedores'});
-  if(state.contenedorNombre) parts.push({label:state.contenedorNombre, view:'contenedor-detalle'});
+  if(state.operacionNombre) parts.push({label:state.operacionNombre, view:'cargas'});
+  if(state.cargaNombre) parts.push({label:state.cargaNombre, view:'lotes'});
+  if(state.loteNombre) parts.push({label:state.loteNombre, view:'lote-detalle'});
 
   bc.innerHTML = parts.map((p,i)=>{
     const isLast = i===parts.length-1;
@@ -443,14 +401,14 @@ document.querySelectorAll('.type-btn').forEach(btn=>{
     state.tipo = btn.dataset.tipo;
     state.clienteId = state.clienteNombre = null;
     state.operacionId = state.operacionNombre = null;
-    state.loteId = state.loteNombre = state.loteFechaProduccion = null;
-    state.contenedorId = state.contenedorNombre = null;
+    state.cargaId = state.cargaNombre = null;
+    state.loteId = state.loteNombre = null;
     goToView('clientes');
   });
 });
 
 // ---------- FIRESTORE HELPERS ----------
-// Estructura: coleccion 'jerarquia', cada doc tiene: tipoCampo (tipo/cliente/operacion/lote/contenedor),
+// Estructura: coleccion 'jerarquia', cada doc tiene: nivel (cliente/operacion/carga/lote),
 // nombre, parentId (id del padre o null si es raiz), tipoRaiz (Cajas/Bins, se propaga a todos los hijos)
 function jerarquiaCol(){
   return __fs.collection(__db, 'jerarquia');
@@ -458,7 +416,7 @@ function jerarquiaCol(){
 
 async function crearNodo(nivel, nombre, parentId, extra){
   const data = {
-    nivel: nivel, // 'cliente' | 'operacion' | 'lote' | 'contenedor'
+    nivel: nivel, // 'cliente' | 'operacion' | 'carga' | 'lote'
     nombre: nombre,
     parentId: parentId || null,
     tipoRaiz: state.tipo,
@@ -482,12 +440,92 @@ async function listarHijos(nivel, parentId){
   return out;
 }
 
+// Crea una fila de lista estandar con boton eliminar incluido
+function crearListItem(nombre, sub, onClick, onDelete){
+  const div = document.createElement('div');
+  div.className = 'list-item';
+  div.innerHTML = `
+    <div class="info-click" style="flex:1;cursor:pointer">
+      <div class="main">${nombre}</div>
+      <div class="sub">${sub}</div>
+    </div>
+    <div class="list-item-actions">
+      <button class="delete-icon-btn" title="Eliminar">🗑</button>
+      <div class="arrow">›</div>
+    </div>
+  `;
+  div.querySelector('.info-click').addEventListener('click', onClick);
+  div.querySelector('.delete-icon-btn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    onDelete();
+  });
+  return div;
+}
+
+// Borrado en cascada: borra el nodo, todos sus descendientes en 'jerarquia',
+// y si en la cascada hay nodos 'lote', borra tambien sus codigos en 'codigos'.
+async function eliminarNodoEnCascada(nodeId, nivel){
+  const idsABorrar = [nodeId];
+  const lotesABorrarCodigos = nivel === 'lote' ? [nodeId] : [];
+
+  // recorrido BFS de hijos en cascada (cliente -> operacion -> carga -> lote)
+  let frontier = [{id: nodeId, nivel}];
+  const ordenNiveles = ['cliente','operacion','carga','lote'];
+  while(frontier.length > 0){
+    const nextFrontier = [];
+    for(const nodo of frontier){
+      const idxNivel = ordenNiveles.indexOf(nodo.nivel);
+      const nivelHijo = ordenNiveles[idxNivel+1];
+      if(!nivelHijo) continue;
+      const q = __fs.query(jerarquiaCol(),
+        __fs.where('nivel','==',nivelHijo),
+        __fs.where('parentId','==', nodo.id)
+      );
+      const snap = await __fs.getDocs(q);
+      snap.forEach(d=>{
+        idsABorrar.push(d.id);
+        nextFrontier.push({id: d.id, nivel: nivelHijo});
+        if(nivelHijo === 'lote') lotesABorrarCodigos.push(d.id);
+      });
+    }
+    frontier = nextFrontier;
+  }
+
+  // borrar codigos de cada lote afectado
+  for(const loteId of lotesABorrarCodigos){
+    const q = __fs.query(codigosCol(), __fs.where('contenedorId','==', loteId));
+    const snap = await __fs.getDocs(q);
+    if(snap.size > 0){
+      const batch = __fs.writeBatch(__db);
+      snap.forEach(d=>batch.delete(d.ref));
+      await batch.commit();
+    }
+  }
+
+  // borrar todos los nodos de jerarquia recolectados
+  const batch2 = __fs.writeBatch(__db);
+  idsABorrar.forEach(id=>{
+    batch2.delete(__fs.doc(__db, 'jerarquia', id));
+  });
+  await batch2.commit();
+}
+
+function confirmarYEliminar(tipoLabel, nombre, nodeId, nivel, onDone){
+  const ok = confirm(`¿Eliminar "${nombre}" (${tipoLabel}) y TODO lo que tiene adentro (incluyendo códigos cargados)? Esta acción no se puede deshacer.`);
+  if(!ok) return;
+  eliminarNodoEnCascada(nodeId, nivel).then(()=>{
+    showToast(`"${nombre}" eliminado`);
+    onDone();
+  }).catch(err=>{
+    showToast('Error al eliminar: '+err.message, 4000);
+  });
+}
+
 // ---------- CLIENTES ----------
 async function loadClientes(){
   const listEl = document.getElementById('clientes-list');
   const emptyEl = document.getElementById('clientes-empty');
   listEl.innerHTML = '<div class="small">Cargando...</div>';
-  // clientes raíz: parentId = tipoRaiz actual (usamos tipoRaiz como filtro, parentId null para nivel cliente)
   const q = __fs.query(jerarquiaCol(),
     __fs.where('nivel','==','cliente'),
     __fs.where('tipoRaiz','==', state.tipo)
@@ -503,17 +541,17 @@ async function loadClientes(){
   } else {
     emptyEl.classList.add('hidden');
     clientes.forEach(c=>{
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.innerHTML = `<div><div class="main">${c.nombre}</div><div class="sub">Cliente</div></div><div class="arrow">›</div>`;
-      div.addEventListener('click', ()=>{
-        state.clienteId = c.id;
-        state.clienteNombre = c.nombre;
-        state.operacionId = state.operacionNombre = null;
-        state.loteId = state.loteNombre = state.loteFechaProduccion = null;
-        state.contenedorId = state.contenedorNombre = null;
-        goToView('operaciones');
-      });
+      const div = crearListItem(c.nombre, 'Cliente',
+        ()=>{
+          state.clienteId = c.id;
+          state.clienteNombre = c.nombre;
+          state.operacionId = state.operacionNombre = null;
+          state.cargaId = state.cargaNombre = null;
+          state.loteId = state.loteNombre = null;
+          goToView('operaciones');
+        },
+        ()=> confirmarYEliminar('Cliente', c.nombre, c.id, 'cliente', loadClientes)
+      );
       listEl.appendChild(div);
     });
   }
@@ -541,16 +579,16 @@ async function loadOperaciones(){
   } else {
     emptyEl.classList.add('hidden');
     ops.forEach(o=>{
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.innerHTML = `<div><div class="main">${o.nombre}</div><div class="sub">Operación</div></div><div class="arrow">›</div>`;
-      div.addEventListener('click', ()=>{
-        state.operacionId = o.id;
-        state.operacionNombre = o.nombre;
-        state.loteId = state.loteNombre = state.loteFechaProduccion = null;
-        state.contenedorId = state.contenedorNombre = null;
-        goToView('lotes');
-      });
+      const div = crearListItem(o.nombre, 'Operación',
+        ()=>{
+          state.operacionId = o.id;
+          state.operacionNombre = o.nombre;
+          state.cargaId = state.cargaNombre = null;
+          state.loteId = state.loteNombre = null;
+          goToView('cargas');
+        },
+        ()=> confirmarYEliminar('Operación', o.nombre, o.id, 'operacion', loadOperaciones)
+      );
       listEl.appendChild(div);
     });
   }
@@ -566,29 +604,62 @@ document.getElementById('crear-operacion-btn').addEventListener('click', async (
   loadOperaciones();
 });
 
+// ---------- CARGAS ----------
+async function loadCargas(){
+  const listEl = document.getElementById('cargas-list');
+  const emptyEl = document.getElementById('cargas-empty');
+  listEl.innerHTML = '<div class="small">Cargando...</div>';
+  const cargas = await listarHijos('carga', state.operacionId);
+  listEl.innerHTML = '';
+  if(cargas.length===0){
+    emptyEl.classList.remove('hidden');
+  } else {
+    emptyEl.classList.add('hidden');
+    cargas.forEach(c=>{
+      const div = crearListItem(c.nombre, 'Carga',
+        ()=>{
+          state.cargaId = c.id;
+          state.cargaNombre = c.nombre;
+          state.loteId = state.loteNombre = null;
+          goToView('lotes');
+        },
+        ()=> confirmarYEliminar('Carga', c.nombre, c.id, 'carga', loadCargas)
+      );
+      listEl.appendChild(div);
+    });
+  }
+}
+
+document.getElementById('crear-carga-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('nueva-carga-input');
+  const nombre = input.value.trim();
+  if(!nombre){ showToast('Ingresá una carga'); return; }
+  await crearNodo('carga', nombre, state.operacionId);
+  input.value = '';
+  showToast('Carga creada: '+nombre);
+  loadCargas();
+});
+
 // ---------- LOTES ----------
 async function loadLotes(){
   const listEl = document.getElementById('lotes-list');
   const emptyEl = document.getElementById('lotes-empty');
   listEl.innerHTML = '<div class="small">Cargando...</div>';
-  const lotes = await listarHijos('lote', state.operacionId);
+  const lotes = await listarHijos('lote', state.cargaId);
   listEl.innerHTML = '';
   if(lotes.length===0){
     emptyEl.classList.remove('hidden');
   } else {
     emptyEl.classList.add('hidden');
     lotes.forEach(l=>{
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      const fechaDisplay = l.fechaProduccion ? formatFechaDisplay(l.fechaProduccion) : 'sin fecha';
-      div.innerHTML = `<div><div class="main">${l.nombre}</div><div class="sub">Lote · Producción: ${fechaDisplay}</div></div><div class="arrow">›</div>`;
-      div.addEventListener('click', ()=>{
-        state.loteId = l.id;
-        state.loteNombre = l.nombre;
-        state.loteFechaProduccion = l.fechaProduccion || '';
-        state.contenedorId = state.contenedorNombre = null;
-        goToView('contenedores');
-      });
+      const div = crearListItem(l.nombre, 'Lote',
+        ()=>{
+          state.loteId = l.id;
+          state.loteNombre = l.nombre;
+          goToView('lote-detalle');
+        },
+        ()=> confirmarYEliminar('Lote', l.nombre, l.id, 'lote', loadLotes)
+      );
       listEl.appendChild(div);
     });
   }
@@ -596,65 +667,26 @@ async function loadLotes(){
 
 document.getElementById('crear-lote-btn').addEventListener('click', async ()=>{
   const input = document.getElementById('nuevo-lote-input');
-  const fechaInput = document.getElementById('nuevo-lote-fecha');
   const nombre = input.value.trim();
-  const fechaProduccion = fechaInput.value; // formato YYYY-MM-DD del input date
   if(!nombre){ showToast('Ingresá un lote'); return; }
-  if(!fechaProduccion){ showToast('Ingresá la fecha de producción'); return; }
-  await crearNodo('lote', nombre, state.operacionId, { fechaProduccion });
+  await crearNodo('lote', nombre, state.cargaId);
   input.value = '';
-  fechaInput.value = '';
   showToast('Lote creado: '+nombre);
   loadLotes();
 });
 
-// ---------- CONTENEDORES ----------
-async function loadContenedores(){
-  const listEl = document.getElementById('contenedores-list');
-  const emptyEl = document.getElementById('contenedores-empty');
-  listEl.innerHTML = '<div class="small">Cargando...</div>';
-  const contenedores = await listarHijos('contenedor', state.loteId);
-  listEl.innerHTML = '';
-  if(contenedores.length===0){
-    emptyEl.classList.remove('hidden');
-  } else {
-    emptyEl.classList.add('hidden');
-    contenedores.forEach(c=>{
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.innerHTML = `<div><div class="main">${c.nombre}</div><div class="sub">Contenedor</div></div><div class="arrow">›</div>`;
-      div.addEventListener('click', ()=>{
-        state.contenedorId = c.id;
-        state.contenedorNombre = c.nombre;
-        goToView('contenedor-detalle');
-      });
-      listEl.appendChild(div);
-    });
-  }
-}
-
-document.getElementById('crear-contenedor-btn').addEventListener('click', async ()=>{
-  const input = document.getElementById('nuevo-contenedor-input');
-  const nombre = input.value.trim();
-  if(!nombre){ showToast('Ingresá un contenedor'); return; }
-  await crearNodo('contenedor', nombre, state.loteId);
-  input.value = '';
-  showToast('Contenedor creado: '+nombre);
-  loadContenedores();
-});
-
-// ---------- DETALLE CONTENEDOR ----------
+// ---------- DETALLE LOTE ----------
 let allRecords = [];
 let html5Qr = null;
 let scanning = false;
 
-function loadContenedorDetalle(){
+function loadLoteDetalle(){
   // reset sub-nav to resumen
   document.querySelectorAll('.subnav button').forEach(b=>b.classList.remove('active'));
   document.querySelector('.subnav button[data-subtab="resumen"]').classList.add('active');
   document.querySelectorAll('.subtab').forEach(t=>t.classList.add('hidden'));
   document.getElementById('sub-resumen').classList.remove('hidden');
-  refreshContenedorStats();
+  refreshLoteStats();
 }
 
 document.querySelectorAll('.subnav button').forEach(btn=>{
@@ -665,11 +697,10 @@ document.querySelectorAll('.subnav button').forEach(btn=>{
     document.getElementById('sub-'+btn.dataset.subtab).classList.remove('hidden');
     if(btn.dataset.subtab !== 'escanear' && scanning) stopScan();
     if(btn.dataset.subtab === 'listado') renderListado();
-    if(btn.dataset.subtab === 'etiquetas') prepararEtiquetas();
   });
 });
 
-// ---------- FIRESTORE: codigos ligados a contenedorId ----------
+// ---------- FIRESTORE: codigos ligados al lote (campo interno contenedorId por compatibilidad) ----------
 function codigosCol(){
   return __fs.collection(__db, 'codigos');
 }
@@ -677,8 +708,8 @@ function codigoDocRef(globalIndex){
   return __fs.doc(__db, 'codigos', String(globalIndex));
 }
 
-async function loadCodigosDeContenedor(){
-  const q = __fs.query(codigosCol(), __fs.where('contenedorId','==', state.contenedorId));
+async function loadCodigosDelLote(){
+  const q = __fs.query(codigosCol(), __fs.where('contenedorId','==', state.loteId));
   const snap = await __fs.getDocs(q);
   const recs = [];
   snap.forEach(d=>recs.push(d.data()));
@@ -688,15 +719,15 @@ async function loadCodigosDeContenedor(){
 }
 
 async function getNextGlobalIndex(){
-  // indice global unico en toda la coleccion 'codigos' para no pisar otros contenedores
+  // indice global unico en toda la coleccion 'codigos' para no pisar otros lotes
   const snap = await __fs.getDocs(codigosCol());
   let max = 0;
   snap.forEach(d=>{ const idx = d.data().index || 0; if(idx>max) max = idx; });
   return max + 1;
 }
 
-async function refreshContenedorStats(){
-  const recs = await loadCodigosDeContenedor();
+async function refreshLoteStats(){
+  const recs = await loadCodigosDelLote();
   const total = recs.length;
   const pegado = recs.filter(r=>r.estado==='pegado').length;
   const pendiente = recs.filter(r=>r.estado==='pendiente').length;
@@ -707,8 +738,8 @@ async function refreshContenedorStats(){
   document.getElementById('stat-duplicado').textContent = duplicado;
 }
 
-// ---------- FUNCION COMPARTIDA: cargar array de codigos al contenedor actual ----------
-async function cargarCodigosAlContenedor(parsedCodes, statusEl){
+// ---------- FUNCION COMPARTIDA: cargar array de codigos al lote actual ----------
+async function cargarCodigosAlLote(parsedCodes, statusEl){
   if(!Array.isArray(parsedCodes) || parsedCodes.length===0){
     statusEl.style.color = 'var(--err)';
     statusEl.textContent = 'No hay códigos para cargar.';
@@ -743,19 +774,19 @@ async function cargarCodigosAlContenedor(parsedCodes, statusEl){
       estado: "pendiente",
       operario: "",
       fecha_pegado: null,
-      contenedorId: state.contenedorId,
+      contenedorId: state.loteId,
       tipo: state.tipo,
       cliente: state.clienteNombre,
       operacion: state.operacionNombre,
+      cargaNombre: state.cargaNombre,
       loteNombre: state.loteNombre,
-      contenedorNombre: state.contenedorNombre,
       fecha_carga: new Date().toISOString()
     });
   });
   await batch.commit();
   statusEl.style.color = 'var(--ok)';
-  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos en este contenedor.`;
-  await refreshContenedorStats();
+  statusEl.textContent = `Listo. Se cargaron ${parsedCodes.length} códigos en este lote.`;
+  await refreshLoteStats();
   return true;
 }
 
@@ -906,11 +937,11 @@ document.getElementById('pdf-file-input').addEventListener('change', async (e)=>
       const confirmBtn = document.createElement('button');
       confirmBtn.className = 'btn';
       confirmBtn.style.marginTop = '10px';
-      confirmBtn.textContent = `Cargar estos ${results.length} códigos a este contenedor`;
+      confirmBtn.textContent = `Cargar estos ${results.length} códigos a este lote`;
       confirmBtn.addEventListener('click', async ()=>{
         confirmBtn.disabled = true;
         const statusEl = document.getElementById('seed-status');
-        await cargarCodigosAlContenedor(results, statusEl);
+        await cargarCodigosAlLote(results, statusEl);
         confirmBtn.textContent = 'Cargado ✓';
       });
       resultEl.appendChild(confirmBtn);
@@ -921,7 +952,7 @@ document.getElementById('pdf-file-input').addEventListener('change', async (e)=>
   }
 });
 
-// ---------- CARGAR PDF AL CONTENEDOR (manual / respaldo) ----------
+// ---------- CARGAR PDF AL LOTE (manual / respaldo) ----------
 document.getElementById('seed-btn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('seed-status');
   const btn = document.getElementById('seed-btn');
@@ -943,33 +974,30 @@ document.getElementById('seed-btn').addEventListener('click', async ()=>{
   }
 
   btn.disabled = true;
-  const success = await cargarCodigosAlContenedor(parsedCodes, statusEl);
+  const success = await cargarCodigosAlLote(parsedCodes, statusEl);
   if(success) document.getElementById('pdf-paste').value = '';
   btn.disabled = false;
 });
 
-// ---------- ELIMINAR CONTENEDOR ----------
+// ---------- ELIMINAR LOTE (desde el detalle) ----------
 document.getElementById('delete-container-btn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('delete-status');
-  const confirmMsg = `¿Seguro que querés eliminar el contenedor "${state.contenedorNombre}" y TODOS sus códigos? Esta acción no se puede deshacer.`;
-  if(!confirm(confirmMsg)) return;
+  const ok = confirm(`¿Eliminar el lote "${state.loteNombre}" y TODOS sus códigos? Esta acción no se puede deshacer.`);
+  if(!ok) return;
 
   statusEl.style.color = 'var(--text)';
   statusEl.textContent = 'Eliminando...';
 
-  const recs = await loadCodigosDeContenedor();
-  const batch = __fs.writeBatch(__db);
-  recs.forEach(r=>{
-    batch.delete(codigoDocRef(r.index));
-  });
-  await batch.commit();
-
-  await __fs.deleteDoc(__fs.doc(__db, 'jerarquia', state.contenedorId));
-
-  statusEl.style.color = 'var(--ok)';
-  statusEl.textContent = 'Contenedor eliminado.';
-  showToast('Contenedor "'+state.contenedorNombre+'" eliminado');
-  setTimeout(()=>{ goToView('contenedores'); }, 600);
+  try{
+    await eliminarNodoEnCascada(state.loteId, 'lote');
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = 'Lote eliminado.';
+    showToast('Lote "'+state.loteNombre+'" eliminado');
+    setTimeout(()=>{ goToView('lotes'); }, 600);
+  }catch(err){
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = 'Error al eliminar: ' + err.message;
+  }
 });
 
 // ---------- ESCANEAR ----------
@@ -996,11 +1024,11 @@ async function handleScanSuccess(decodedText){
     return;
   }
   if(allRecords.length === 0){
-    await loadCodigosDeContenedor();
+    await loadCodigosDelLote();
   }
   const record = findRecordByRawScan(decodedText);
   if(!record){
-    resultBox.innerHTML = `<div class="result-box err">⚠ Código no reconocido.<div class="small">No corresponde a los códigos cargados en este contenedor.</div></div>`;
+    resultBox.innerHTML = `<div class="result-box err">⚠ Código no reconocido.<div class="small">No corresponde a los códigos cargados en este lote.</div></div>`;
     showToast('Código no reconocido');
     return;
   }
@@ -1019,11 +1047,11 @@ async function handleScanSuccess(decodedText){
   record.estado='pegado'; record.operario=operario; record.fecha_pegado=now;
   resultBox.innerHTML = `<div class="result-box ok">✓ OK — Código #${record.index}<div class="small">Registrado correctamente</div></div>`;
   showToast('✓ Código #'+record.index+' verificado');
-  refreshContenedorStats();
+  refreshLoteStats();
 }
 
 document.getElementById('start-scan-btn').addEventListener('click', async ()=>{
-  if(allRecords.length===0) await loadCodigosDeContenedor();
+  if(allRecords.length===0) await loadCodigosDelLote();
   document.getElementById('start-scan-btn').classList.add('hidden');
   document.getElementById('stop-scan-btn').classList.remove('hidden');
   document.getElementById('scan-result').innerHTML = '';
@@ -1098,135 +1126,6 @@ function renderListado(){
   tbody.appendChild(frag);
 }
 document.getElementById('search-input').addEventListener('input', renderListado);
-
-// ---------- GENERAR ETIQUETAS ----------
-async function prepararEtiquetas(){
-  const fechaDisplay = document.getElementById('etiqueta-fecha-display');
-  fechaDisplay.value = state.loteFechaProduccion ? formatFechaDisplay(state.loteFechaProduccion) : 'Sin fecha asignada al lote';
-
-  if(allRecords.length === 0){
-    await loadCodigosDeContenedor();
-  }
-  const select = document.getElementById('etiqueta-codigo-select');
-  select.innerHTML = allRecords.map(r=>
-    `<option value="${r.index}">#${r.index} ${r.estado==='pegado' ? '(ya impreso/pegado)' : ''}</option>`
-  ).join('');
-}
-
-async function generarImagenDataMatrix(record){
-  const gtin = record.gtin || '';
-  const serial = record.serial;
-  const security = record.security || '';
-  const GS = String.fromCharCode(0x1d);
-  let raw;
-  if(gtin){
-    raw = `01${gtin}21${serial}${GS}93${security}`;
-  } else {
-    // codigo no-GS1 (ej QR comun), usamos el texto crudo guardado en serial
-    raw = serial;
-  }
-  const result = await __zxingWriter.writeBarcode(raw, {
-    format: "DataMatrix",
-    scale: 5
-  });
-  if(result.error){
-    throw new Error('No se pudo generar el código: ' + result.error);
-  }
-  const arrayBuffer = await result.image.arrayBuffer();
-  return new Uint8Array(arrayBuffer);
-}
-
-document.getElementById('generar-etiqueta-btn').addEventListener('click', async ()=>{
-  const statusEl = document.getElementById('etiqueta-status');
-  const btn = document.getElementById('generar-etiqueta-btn');
-  const select = document.getElementById('etiqueta-codigo-select');
-  const fileInput = document.getElementById('etiqueta-docx-input');
-
-  const idx = parseInt(select.value, 10);
-  const file = fileInput.files[0];
-
-  if(!idx){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'No hay código seleccionado.';
-    return;
-  }
-  if(!file){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Subí la plantilla Word (.docx) de este cliente.';
-    return;
-  }
-  if(!state.loteFechaProduccion){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Este lote no tiene fecha de producción asignada. Volvé al lote y completala.';
-    return;
-  }
-
-  const record = allRecords.find(r=>r.index===idx);
-  if(!record){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'No se encontró el código seleccionado.';
-    return;
-  }
-
-  btn.disabled = true;
-  statusEl.style.color = 'var(--text)';
-  statusEl.textContent = 'Generando código de barras...';
-
-  try{
-    const qrImageBytes = await generarImagenDataMatrix(record);
-
-    statusEl.textContent = 'Completando plantilla...';
-    const docxArrayBuffer = await file.arrayBuffer();
-    const zip = new window.PizZip(docxArrayBuffer);
-
-    const imageOpts = {
-      centered: false,
-      getImage: function(tagValue, tagName){
-        // tagValue sera la clave 'qrImage', devolvemos los bytes ya generados
-        return qrImageBytes;
-      },
-      getSize: function(img, tagValue, tagName){
-        return [100, 100];
-      }
-    };
-    const imageModule = new window.ImageModule(imageOpts);
-
-    const doc = new window.docxtemplater(zip, {
-      modules: [imageModule],
-      paragraphLoop: true,
-      linebreaks: true
-    });
-
-    doc.render({
-      fecha: formatFechaDisplay(state.loteFechaProduccion),
-      lote: state.loteNombre,
-      qrImage: 'qrImage'
-    });
-
-    const outBlob = doc.getZip().generate({
-      type: 'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    });
-
-    const url = URL.createObjectURL(outBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Etiqueta_${state.loteNombre}_${idx}.docx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    statusEl.style.color = 'var(--ok)';
-    statusEl.textContent = `Etiqueta generada y descargada (código #${idx}).`;
-
-    await prepararEtiquetas();
-  }catch(err){
-    statusEl.style.color = 'var(--err)';
-    statusEl.textContent = 'Error al generar la etiqueta: ' + err.message;
-  }
-  btn.disabled = false;
-});
 
 checkLogin();
 </script>
