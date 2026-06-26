@@ -162,8 +162,28 @@
 <div id="app-screen" class="wrap hidden">
   <header>
     <h1>QR Clientes <span>Verificación de lotes pegados</span></h1>
-    <button class="btn ghost" id="logout-btn">Salir</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" id="buscador-global-btn">🔍 Buscar código</button>
+      <button class="btn ghost" id="logout-btn">Salir</button>
+    </div>
   </header>
+
+  <div id="buscador-global-panel" class="card hidden" style="margin-bottom:16px">
+    <h2>Buscar código en toda la base</h2>
+    <p class="small" style="margin-top:-6px;margin-bottom:12px">Pegá el serial o parte del texto del código (lo que viste en pantalla al decodificar, o lo que escaneaste) para ver en qué lote está cargado.</p>
+    <div class="row" style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="buscador-global-input" type="text" placeholder="Ej: 5>,r'H  o  parte del serial" style="flex:1" />
+      <button class="btn secondary" id="buscador-global-submit" style="width:auto;padding:11px 18px">Buscar</button>
+    </div>
+    <div id="buscador-global-resultado" class="small"></div>
+
+    <hr style="border-color:var(--border);margin:18px 0" />
+
+    <h2 style="color:var(--warn)">Limpiar códigos huérfanos</h2>
+    <p class="small" style="margin-top:-6px;margin-bottom:12px">Si alguna vez eliminaste un Cliente/Operación/Carga/Lote ANTES de tener el botón de eliminar bien conectado, pueden haber quedado códigos sueltos en la base sin un lote real al que pertenecer. Esto los detecta y los borra para liberar esos seriales.</p>
+    <button class="btn secondary" id="detectar-huerfanos-btn">Detectar códigos huérfanos</button>
+    <div id="huerfanos-resultado" class="small" style="margin-top:8px"></div>
+  </div>
 
   <div id="breadcrumb" class="breadcrumb"></div>
 
@@ -1219,6 +1239,112 @@ document.getElementById('imprimir-resumen-btn').addEventListener('click', async 
   `).join('');
 
   window.print();
+});
+
+// ---------- BUSCADOR GLOBAL DE CODIGOS ----------
+document.getElementById('buscador-global-btn').addEventListener('click', ()=>{
+  document.getElementById('buscador-global-panel').classList.toggle('hidden');
+});
+
+document.getElementById('buscador-global-submit').addEventListener('click', buscarCodigoGlobal);
+document.getElementById('buscador-global-input').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') buscarCodigoGlobal();
+});
+
+async function buscarCodigoGlobal(){
+  const input = document.getElementById('buscador-global-input');
+  const resultEl = document.getElementById('buscador-global-resultado');
+  const texto = input.value.trim();
+
+  if(!texto){
+    resultEl.style.color = 'var(--err)';
+    resultEl.textContent = 'Ingresá un serial o parte del código a buscar.';
+    return;
+  }
+
+  resultEl.style.color = 'var(--text)';
+  resultEl.textContent = 'Buscando en toda la base...';
+
+  const snap = await __fs.getDocs(codigosCol());
+  const coincidencias = [];
+  snap.forEach(d=>{
+    const data = d.data();
+    const serial = data.serial || '';
+    const gtin = data.gtin || '';
+    if(serial.includes(texto) || gtin.includes(texto) || String(data.index)===texto){
+      coincidencias.push(data);
+    }
+  });
+
+  if(coincidencias.length === 0){
+    resultEl.style.color = 'var(--muted)';
+    resultEl.textContent = 'No se encontró ningún código que coincida con ese texto. Puede que nunca haya sido cargado.';
+    return;
+  }
+
+  resultEl.style.color = 'var(--ok)';
+  resultEl.innerHTML = coincidencias.map(c=>{
+    const camino = [c.tipo, c.cliente, c.operacion, c.cargaNombre, c.loteNombre].filter(Boolean).join(' › ');
+    const estadoLabel = c.estado==='pegado' ? 'Pegado OK' : (c.estado==='pendiente' ? 'Pendiente' : 'Otro estado');
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <strong style="color:var(--text)">Código #${c.index}</strong> (serial: ${c.serial})<br/>
+      <span style="color:var(--accent)">${camino}</span><br/>
+      Estado: ${estadoLabel}${c.operario ? ' — verificado por '+c.operario : ''}
+    </div>`;
+  }).join('');
+}
+
+// ---------- LIMPIAR CODIGOS HUERFANOS ----------
+document.getElementById('detectar-huerfanos-btn').addEventListener('click', async ()=>{
+  const resultEl = document.getElementById('huerfanos-resultado');
+  resultEl.style.color = 'var(--text)';
+  resultEl.textContent = 'Revisando toda la base...';
+
+  // 1. traer todos los Lotes que existen actualmente en la jerarquia
+  const lotesSnap = await __fs.getDocs(
+    __fs.query(jerarquiaCol(), __fs.where('nivel','==','lote'))
+  );
+  const lotesVivos = new Set();
+  lotesSnap.forEach(d=>lotesVivos.add(d.id));
+
+  // 2. traer todos los codigos y detectar cuales tienen un contenedorId que ya no existe
+  const codigosSnap = await __fs.getDocs(codigosCol());
+  const huerfanos = [];
+  codigosSnap.forEach(d=>{
+    const data = d.data();
+    if(!data.contenedorId || !lotesVivos.has(data.contenedorId)){
+      huerfanos.push({ id: d.id, ...data });
+    }
+  });
+
+  if(huerfanos.length === 0){
+    resultEl.style.color = 'var(--ok)';
+    resultEl.textContent = 'No se encontraron códigos huérfanos. La base está consistente.';
+    return;
+  }
+
+  resultEl.style.color = 'var(--warn)';
+  const camposPreview = huerfanos.slice(0,5).map(h=>`#${h.index} (serial: ${h.serial}, lote previo: ${h.loteNombre||'desconocido'})`).join('<br/>');
+  resultEl.innerHTML = `
+    Se encontraron <strong>${huerfanos.length}</strong> código(s) huérfanos (de lotes que ya no existen):<br/><br/>
+    ${camposPreview}${huerfanos.length>5 ? '<br/>...y '+(huerfanos.length-5)+' más' : ''}
+    <br/><br/>
+    <button class="btn danger" id="confirmar-borrar-huerfanos-btn" style="margin-top:6px">Eliminar estos ${huerfanos.length} código(s) huérfanos</button>
+  `;
+
+  document.getElementById('confirmar-borrar-huerfanos-btn').addEventListener('click', async ()=>{
+    const ok = confirm(`¿Eliminar definitivamente estos ${huerfanos.length} códigos huérfanos? Esta acción no se puede deshacer.`);
+    if(!ok) return;
+    resultEl.style.color = 'var(--text)';
+    resultEl.textContent = 'Eliminando...';
+    const batch = __fs.writeBatch(__db);
+    huerfanos.forEach(h=>{
+      batch.delete(__fs.doc(__db, 'codigos', h.id));
+    });
+    await batch.commit();
+    resultEl.style.color = 'var(--ok)';
+    resultEl.textContent = `Listo. Se eliminaron ${huerfanos.length} código(s) huérfanos. Ya podés volver a cargar esos PDFs sin problema.`;
+  });
 });
 
 checkLogin();
